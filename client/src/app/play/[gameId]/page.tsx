@@ -1,4 +1,5 @@
 import { unstable_noStore as noStore } from 'next/cache'
+import { headers } from 'next/headers'
 import { getServerSession } from 'next-auth'
 import { notFound, redirect } from 'next/navigation'
 import { z } from 'zod'
@@ -52,11 +53,21 @@ export default async function SoloPlayPage({
   const soloSettings = getSoloSettings(params.gameId, searchParams)
   const shouldForceNewRoom = readFirstSearchParam(searchParams?.session) !== undefined
 
+  // Read CDN country headers so Indian users automatically land on the
+  // Indian trivia pool when the host preference is 'auto'. Falls back to
+  // international when the header is missing (e.g. local dev).
+  const headerBag = headers()
+  const creatorCountry =
+    headerBag.get('x-vercel-ip-country') ??
+    headerBag.get('cf-ipcountry') ??
+    undefined
+
   const soloSession = await getOrCreateSoloRoomForUser({
     creatorId: session.user.id,
     gameId: params.gameId,
     settings: soloSettings,
     forceNew: shouldForceNewRoom,
+    creatorCountry: creatorCountry ?? undefined,
   }).catch((error) => {
     if (isGameUnavailableError(error)) {
       return error

@@ -28,7 +28,6 @@ export async function GET(request: NextRequest) {
       ...(status ? { status: status as 'ACTIVE' | 'SUSPENDED' | 'BANNED' } : {}),
     },
     orderBy: { createdAt: 'desc' },
-    take: 50,
   })
 
   return NextResponse.json(users)

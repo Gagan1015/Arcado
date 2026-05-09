@@ -152,6 +152,12 @@ export class FlagelRuntime extends BaseGameRuntime {
     }
   }
 
+  protected override determineSoloWinner(playerId: UserId): boolean {
+    // Solo Flagel: winning means actually identifying the country within
+    // the attempt budget (skipping or running out of guesses is a loss).
+    return this.playerState.get(playerId)?.solved ?? false
+  }
+
   protected override buildResultMetadata(playerId: UserId): GameResultData['metadata'] {
     const state = this.playerState.get(playerId)
 

@@ -5,9 +5,10 @@ import { requireAdminSession } from '@/lib/admin'
 export default async function AdminUsersPage() {
   const session = await requireAdminSession()
 
+  // No `take` so admins can see every user. The client-side list is already
+  // filtered / searched inside AdminUsersClient.
   const users = await prisma.user.findMany({
     orderBy: { createdAt: 'desc' },
-    take: 50,
     select: {
       id: true,
       name: true,

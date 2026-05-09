@@ -42,11 +42,24 @@ export async function createRoomForUser(input: {
   gameId: GameId
   maxPlayers?: number
   settings?: GameSettings
+  /**
+   * ISO-3166 alpha-2 country code inferred from the request (e.g. via
+   * `x-vercel-ip-country` / `cf-ipcountry`). Only used when the host's trivia
+   * region preference is 'auto' so we can default Indian users to the Indian
+   * pool without an explicit setting.
+   */
+  creatorCountry?: string
 }) {
   const code = await generateUniqueRoomCode()
   const gameConfig = await getGameConfig(input.gameId)
   const maxPlayers = clampMaxPlayers(input.gameId, input.maxPlayers, gameConfig)
-  const settings = normalizeRoomSettings(input.gameId, maxPlayers, input.settings)
+  const settings = await normalizeRoomSettings(
+    input.gameId,
+    maxPlayers,
+    input.settings,
+    gameConfig,
+    input.creatorCountry
+  )
 
   if (gameConfig && !gameConfig.isEnabled) {
     throw new GameUnavailableError(
@@ -82,6 +95,7 @@ export async function getOrCreateSoloRoomForUser(input: {
   gameId: GameId
   settings?: GameSettings
   forceNew?: boolean
+  creatorCountry?: string
 }) {
   const gameConfig = await getGameConfig(input.gameId)
   if (gameConfig && !gameConfig.isEnabled) {
@@ -128,6 +142,7 @@ export async function getOrCreateSoloRoomForUser(input: {
     gameId: input.gameId,
     maxPlayers: 1,
     settings: input.settings,
+    creatorCountry: input.creatorCountry,
   })
 
   return {
@@ -279,6 +294,7 @@ async function getGameConfig(gameId: GameId) {
       isEnabled: true,
       minPlayers: true,
       maxPlayers: true,
+      settings: true,
     },
   })
 }
@@ -299,19 +315,52 @@ function clampMaxPlayers(
   return Math.max(minPlayers, Math.min(configuredMaxPlayers, maxPlayers))
 }
 
-function normalizeRoomSettings(
+async function normalizeRoomSettings(
   gameId: GameId,
   maxPlayers: number,
-  settings?: GameSettings
-): GameSettings | undefined {
+  settings: GameSettings | undefined,
+  gameConfig: Awaited<ReturnType<typeof getGameConfig>>,
+  creatorCountry?: string
+): Promise<GameSettings | undefined> {
+  const next: GameSettings = { ...(settings ?? {}) }
+
   if (maxPlayers === 1 && SOLO_ONE_ROUND_GAMES.has(gameId)) {
-    return {
-      ...settings,
-      rounds: 1,
-    }
+    next.rounds = 1
   }
 
-  return settings
+  if (gameId === 'trivia') {
+    const adminDefault = readTriviaRegionFromConfig(gameConfig)
+    const hostPreference = next.triviaRegion ?? adminDefault ?? 'auto'
+    next.triviaRegion = hostPreference
+    next.triviaResolvedRegion = resolveRegionNow(hostPreference, creatorCountry)
+  }
+
+  // Drop entirely if nothing meaningful remains.
+  const hasKeys = Object.values(next).some((value) => value !== undefined)
+  return hasKeys ? next : undefined
+}
+
+function readTriviaRegionFromConfig(
+  gameConfig: Awaited<ReturnType<typeof getGameConfig>>
+): 'auto' | 'international' | 'india' | undefined {
+  const rawSettings = gameConfig?.settings as Record<string, unknown> | null | undefined
+  const value = rawSettings?.triviaRegion
+  if (value === 'auto' || value === 'india' || value === 'international') {
+    return value
+  }
+  return undefined
+}
+
+function resolveRegionNow(
+  preference: 'auto' | 'international' | 'india',
+  creatorCountry?: string
+): 'international' | 'india' {
+  if (preference === 'india' || preference === 'international') {
+    return preference
+  }
+  // 'auto' — infer from creator country. Only 'IN' currently maps to the
+  // Indian pool; anything else falls back to international.
+  return (creatorCountry ?? '').toUpperCase() === 'IN' ? 'india' : 'international'
 }
 
 function mapRoomStatus(status: string): Room['status'] {

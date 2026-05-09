@@ -1,7 +1,17 @@
 import { prisma } from '@arcado/db'
+import type { Prisma } from '@arcado/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { createAdminLog, requireAdminApiSession } from '@/lib/admin'
+
+type GameConfigPatch = {
+  isEnabled?: boolean
+  minPlayers?: number
+  maxPlayers?: number
+  defaultRounds?: number
+  roundTime?: number
+  settings?: Record<string, unknown>
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -13,13 +23,7 @@ export async function PATCH(
     return session
   }
 
-  const body = (await request.json()) as {
-    isEnabled?: boolean
-    minPlayers?: number
-    maxPlayers?: number
-    defaultRounds?: number
-    roundTime?: number
-  }
+  const body = (await request.json()) as GameConfigPatch
 
   const game = await prisma.gameConfig.findUnique({
     where: { gameId: params.gameId },
@@ -29,6 +33,16 @@ export async function PATCH(
     return NextResponse.json({ error: 'Game config not found' }, { status: 404 })
   }
 
+  // Merge the incoming settings object with existing settings so callers
+  // can update a single key (e.g. { triviaRegion: 'india' }) without losing
+  // other JSON values stored alongside it.
+  const mergedSettings = body.settings
+    ? {
+        ...((game.settings as Record<string, unknown> | null) ?? {}),
+        ...body.settings,
+      }
+    : undefined
+
   const updated = await prisma.gameConfig.update({
     where: { gameId: params.gameId },
     data: {
@@ -37,6 +51,9 @@ export async function PATCH(
       ...(body.maxPlayers !== undefined ? { maxPlayers: body.maxPlayers } : {}),
       ...(body.defaultRounds !== undefined ? { defaultRounds: body.defaultRounds } : {}),
       ...(body.roundTime !== undefined ? { roundTime: body.roundTime } : {}),
+      ...(mergedSettings !== undefined
+        ? { settings: mergedSettings as Prisma.InputJsonValue }
+        : {}),
     },
   })
 

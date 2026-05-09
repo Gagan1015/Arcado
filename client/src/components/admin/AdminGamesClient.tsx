@@ -1,29 +1,28 @@
 'use client'
 
+import Link from 'next/link'
 import { motion } from 'motion/react'
-import { usePathname, useRouter } from 'next/navigation'
-import { startTransition, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
+  ArrowRight,
   BookOpen,
   CheckCircle2,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Clock,
   Eye,
-  FileText,
   Gamepad2,
+  Globe,
   Layers,
+  MapPin,
   Save,
-  Search,
   Settings,
   ShieldAlert,
   Users,
-  X,
 } from 'lucide-react'
 
 import { GameIcon } from '@/components/ui/GameIcons'
 import { useToast } from '@/components/ui/Toast'
+
+/* ── Types ──────────────────────────────────────────────────────────── */
 
 interface GameConfig {
   id: string
@@ -39,42 +38,6 @@ interface GameConfig {
   updatedAt: string
 }
 
-interface TriviaQuestionItem {
-  id: string
-  question: string
-  status: string
-  category: string
-  difficulty: string
-  reportCount: number
-  usageCount: number
-  correctCount: number
-  lastUsedAt: string | null
-  source: string
-  tags: string[]
-  explanation: string | null
-  answers: unknown
-  correctId: string
-  createdAt: string
-  updatedAt: string
-  recentActions: Array<{
-    id: string
-    action: string
-    actorName: string
-    actorEmail: string
-    actorRole: string
-    details: Record<string, unknown> | null
-    createdAt: string
-  }>
-}
-
-interface TriviaQuestionFilters {
-  page: number
-  status: string
-  category: string
-  difficulty: string
-  search: string
-}
-
 interface SummaryStats {
   totalGames: number
   enabledGames: number
@@ -85,18 +48,19 @@ interface SummaryStats {
 
 interface AdminGamesClientProps {
   gameConfigs: GameConfig[]
-  triviaQuestions: TriviaQuestionItem[]
-  filters: TriviaQuestionFilters
-  totalTriviaCount: number
-  totalTriviaPages: number
-  triviaPageSize: number
-  availableStatuses: string[]
-  availableCategories: string[]
-  availableDifficulties: string[]
   summary: SummaryStats
 }
 
 type EditableGameField = 'minPlayers' | 'maxPlayers' | 'defaultRounds' | 'roundTime'
+type TriviaRegionChoice = 'auto' | 'international' | 'india'
+
+const REGION_LABEL: Record<TriviaRegionChoice, string> = {
+  auto: 'Auto (by location)',
+  international: 'International',
+  india: 'India',
+}
+
+/* ── Config ─────────────────────────────────────────────────────────── */
 
 const GAME_COLORS: Record<string, string> = {
   skribble: 'var(--game-skribble)',
@@ -105,19 +69,10 @@ const GAME_COLORS: Record<string, string> = {
   flagel: 'var(--game-flagel)',
 }
 
-const STATUS_CONFIG: Record<string, { label: string; badge: string }> = {
-  approved: { label: 'Approved', badge: 'badge-success' },
-  reviewed: { label: 'Reviewed', badge: 'badge-primary' },
-  escalated: { label: 'Escalated', badge: 'badge-warning' },
-  hidden: { label: 'Hidden', badge: 'badge-error' },
-  rejected: { label: 'Rejected', badge: 'badge-error' },
-}
+/* ── Helpers ────────────────────────────────────────────────────────── */
 
 function formatDateTime(dateString: string | null) {
-  if (!dateString) {
-    return '-'
-  }
-
+  if (!dateString) return '-'
   return new Date(dateString).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -128,150 +83,57 @@ function formatDateTime(dateString: string | null) {
 }
 
 function formatRelative(dateString: string | null) {
-  if (!dateString) {
-    return 'Never'
-  }
-
+  if (!dateString) return 'Never'
   const diff = Date.now() - new Date(dateString).getTime()
   const minutes = Math.floor(diff / 60000)
-
   if (minutes < 1) return 'just now'
   if (minutes < 60) return `${minutes}m ago`
-
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours}h ago`
-
   const days = Math.floor(hours / 24)
   if (days < 30) return `${days}d ago`
-
   return formatDateTime(dateString)
 }
 
-function parseAnswers(
-  answers: unknown,
-): Array<{ id: string; text: string }> {
-  if (!Array.isArray(answers)) {
-    return []
-  }
-
-  return answers
-    .map((answer) => {
-      if (!answer || typeof answer !== 'object') {
-        return null
-      }
-
-      const candidate = answer as { id?: unknown; text?: unknown }
-      if (typeof candidate.id !== 'string' || typeof candidate.text !== 'string') {
-        return null
-      }
-
-      return {
-        id: candidate.id,
-        text: candidate.text,
-      }
-    })
-    .filter((answer): answer is { id: string; text: string } => Boolean(answer))
-}
-
-function getHistoryActionLabel(action: string) {
-  const labels: Record<string, string> = {
-    'trivia.question.update_status': 'Updated lifecycle status',
-    'moderation.trivia.approve': 'Approved',
-    'moderation.trivia.reject': 'Rejected',
-    'moderation.trivia.hide': 'Hidden',
-    'moderation.trivia.escalate': 'Escalated',
-    'moderation.trivia.mark_reviewed': 'Marked reviewed',
-  }
-
-  return labels[action] ?? action
-}
+/* ══════════════════════════════════════════════════════════════════════════
+   Component
+   ══════════════════════════════════════════════════════════════════════════ */
 
 export function AdminGamesClient({
   gameConfigs: initialGameConfigs,
-  triviaQuestions,
-  filters,
-  totalTriviaCount,
-  totalTriviaPages,
-  triviaPageSize,
-  availableStatuses,
-  availableCategories,
-  availableDifficulties,
   summary,
 }: AdminGamesClientProps) {
-  const router = useRouter()
-  const pathname = usePathname()
   const toast = useToast()
   const [gameConfigs, setGameConfigs] = useState(initialGameConfigs)
-  const [draftFilters, setDraftFilters] = useState(filters)
-  const [selectedQuestion, setSelectedQuestion] = useState<TriviaQuestionItem | null>(null)
   const [editingGame, setEditingGame] = useState<string | null>(null)
   const [savingGame, setSavingGame] = useState<string | null>(null)
-  const [updatingQuestionId, setUpdatingQuestionId] = useState<string | null>(null)
-  const [questionStatusDraft, setQuestionStatusDraft] = useState('')
-  const [questionStatusNote, setQuestionStatusNote] = useState('')
   const [gameEdits, setGameEdits] = useState<Record<string, Partial<GameConfig>>>({})
+  // Region is stored in the JSON `settings` blob, so we track its edits
+  // separately from the typed field edits above.
+  const [regionEdits, setRegionEdits] = useState<Record<string, TriviaRegionChoice>>({})
 
   const restrictedCountLabel = useMemo(() => {
-    if (summary.restrictedQuestions === 0) {
-      return 'No restricted items'
-    }
-
+    if (summary.restrictedQuestions === 0) return 'No restricted items'
     return `${summary.restrictedQuestions} restricted`
   }, [summary.restrictedQuestions])
-
-  function pushFilters(next: Partial<TriviaQuestionFilters>) {
-    const params = new URLSearchParams()
-    const merged = { ...filters, ...next }
-
-    if (merged.page > 1) {
-      params.set('page', String(merged.page))
-    }
-
-    if (merged.status) {
-      params.set('status', merged.status)
-    }
-
-    if (merged.category) {
-      params.set('category', merged.category)
-    }
-
-    if (merged.difficulty) {
-      params.set('difficulty', merged.difficulty)
-    }
-
-    if (merged.search) {
-      params.set('search', merged.search)
-    }
-
-    const query = params.toString()
-    router.push(query ? `${pathname}?${query}` : pathname)
-  }
-
-  function applyFilters() {
-    pushFilters({
-      ...draftFilters,
-      page: 1,
-    })
-  }
-
-  function resetFilters() {
-    const cleared = {
-      page: 1,
-      status: '',
-      category: '',
-      difficulty: '',
-      search: '',
-    }
-
-    setDraftFilters(cleared)
-    pushFilters(cleared)
-  }
 
   function updateGameEdit(gameId: string, field: EditableGameField, value: number) {
     setGameEdits((current) => ({
       ...current,
       [gameId]: { ...current[gameId], [field]: value },
     }))
+  }
+
+  function readRegionFromConfig(config: GameConfig): TriviaRegionChoice {
+    const value = (config.settings as { triviaRegion?: unknown } | null)?.triviaRegion
+    if (value === 'auto' || value === 'international' || value === 'india') {
+      return value
+    }
+    return 'auto'
+  }
+
+  function updateRegionEdit(gameId: string, value: TriviaRegionChoice) {
+    setRegionEdits((current) => ({ ...current, [gameId]: value }))
   }
 
   async function toggleGame(gameId: string, isEnabled: boolean) {
@@ -295,7 +157,9 @@ export function AdminGamesClient({
       }
 
       setGameConfigs((current) =>
-        current.map((game) => (game.gameId === gameId ? { ...game, ...(payload ?? {}) } : game)),
+        current.map((game) =>
+          game.gameId === gameId ? { ...game, ...(payload ?? {}) } : game,
+        ),
       )
       toast.success(`${gameId} ${isEnabled ? 'enabled' : 'disabled'} successfully.`)
     } catch {
@@ -307,9 +171,8 @@ export function AdminGamesClient({
 
   async function saveGameConfig(gameId: string) {
     const edits = gameEdits[gameId]
-    if (!edits) {
-      return
-    }
+    const regionEdit = regionEdits[gameId]
+    if (!edits && !regionEdit) return
 
     setSavingGame(gameId)
 
@@ -317,7 +180,12 @@ export function AdminGamesClient({
       const response = await fetch(`/api/admin/games/${gameId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(edits),
+        body: JSON.stringify({
+          ...(edits ?? {}),
+          ...(regionEdit !== undefined
+            ? { settings: { triviaRegion: regionEdit } }
+            : {}),
+        }),
       })
 
       const payload = (await response.json().catch(() => null)) as
@@ -331,9 +199,16 @@ export function AdminGamesClient({
       }
 
       setGameConfigs((current) =>
-        current.map((game) => (game.gameId === gameId ? { ...game, ...(payload ?? {}) } : game)),
+        current.map((game) =>
+          game.gameId === gameId ? { ...game, ...(payload ?? {}) } : game,
+        ),
       )
       setGameEdits((current) => {
+        const next = { ...current }
+        delete next[gameId]
+        return next
+      })
+      setRegionEdits((current) => {
         const next = { ...current }
         delete next[gameId]
         return next
@@ -347,85 +222,43 @@ export function AdminGamesClient({
     }
   }
 
-  function openQuestion(question: TriviaQuestionItem) {
-    setSelectedQuestion(question)
-    setQuestionStatusDraft(question.status)
-    setQuestionStatusNote('')
-  }
-
-  async function updateQuestionStatus() {
-    if (!selectedQuestion || !questionStatusDraft || questionStatusDraft === selectedQuestion.status) {
-      return
-    }
-
-    setUpdatingQuestionId(selectedQuestion.id)
-
-
-    try {
-      const response = await fetch(`/api/admin/trivia-questions/${selectedQuestion.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: questionStatusDraft,
-          note: questionStatusNote,
-        }),
-      })
-
-      const payload = (await response.json().catch(() => null)) as
-        | {
-            error?: string
-            question?: {
-              status: string
-              updatedAt: string
-            }
-          }
-        | null
-
-      if (!response.ok) {
-        toast.error(payload?.error ?? 'Unable to update trivia question status.')
-        return
-      }
-
-      setSelectedQuestion((current) =>
-        current
-          ? {
-              ...current,
-              status: payload?.question?.status ?? questionStatusDraft,
-              updatedAt: payload?.question?.updatedAt ?? current.updatedAt,
-            }
-          : null,
-      )
-
-      toast.success('Trivia question lifecycle updated successfully.')
-
-      startTransition(() => {
-        router.refresh()
-      })
-    } catch {
-      toast.error('Unable to update trivia question status.')
-    } finally {
-      setUpdatingQuestionId(null)
-    }
-  }
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-[var(--text-primary)] sm:text-3xl">Games</h1>
         <p className="mt-1 text-sm text-[var(--text-secondary)]">
-          Manage runtime game configuration and browse trivia content with lifecycle controls.
+          Manage runtime game configuration. Trivia content review now lives on its own page.
         </p>
       </div>
 
-
-
+      {/* Summary cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {[
           { label: 'Games', value: summary.totalGames, icon: Gamepad2, color: 'var(--primary-500)' },
-          { label: 'Enabled', value: summary.enabledGames, icon: CheckCircle2, color: 'var(--success-500)' },
-          { label: 'Questions', value: summary.totalQuestions, icon: BookOpen, color: 'var(--game-trivia)' },
-          { label: 'Reported', value: summary.reportedQuestions, icon: ShieldAlert, color: 'var(--warning-500)' },
-          { label: 'Restricted', value: restrictedCountLabel, icon: Eye, color: 'var(--error-500)' },
+          {
+            label: 'Enabled',
+            value: summary.enabledGames,
+            icon: CheckCircle2,
+            color: 'var(--success-500)',
+          },
+          {
+            label: 'Questions',
+            value: summary.totalQuestions,
+            icon: BookOpen,
+            color: 'var(--game-trivia)',
+          },
+          {
+            label: 'Reported',
+            value: summary.reportedQuestions,
+            icon: ShieldAlert,
+            color: 'var(--warning-500)',
+          },
+          {
+            label: 'Restricted',
+            value: restrictedCountLabel,
+            icon: Eye,
+            color: 'var(--error-500)',
+          },
         ].map((stat) => (
           <div key={stat.label} className="card">
             <div className="flex items-center gap-2">
@@ -437,6 +270,46 @@ export function AdminGamesClient({
         ))}
       </div>
 
+      {/* Trivia browser CTA */}
+      <Link
+        href="/admin/games/trivia"
+        className="card group flex flex-col gap-3 transition-all hover:-translate-y-0.5 hover:shadow-lg sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="flex items-start gap-4">
+          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--game-trivia)]/15 text-[var(--game-trivia)]">
+            <BookOpen className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-[var(--text-primary)]">
+              Trivia Question Browser
+            </h3>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              Search, inspect, and adjust the lifecycle state of every trivia question in the
+              database.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-[var(--text-tertiary)]">
+              <span className="inline-flex items-center gap-1.5">
+                <BookOpen className="h-3.5 w-3.5" />
+                {summary.totalQuestions.toLocaleString()} questions
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <ShieldAlert className="h-3.5 w-3.5 text-[var(--warning-500)]" />
+                {summary.reportedQuestions} reported
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Eye className="h-3.5 w-3.5 text-[var(--error-500)]" />
+                {summary.restrictedQuestions} restricted
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-sm font-medium text-[var(--primary-400)] group-hover:text-[var(--primary-300)]">
+          Open browser
+          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+        </div>
+      </Link>
+
+      {/* Game Configuration */}
       <div className="space-y-4">
         <div>
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">Game Configuration</h2>
@@ -483,8 +356,12 @@ export function AdminGamesClient({
                     </div>
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-lg font-semibold text-[var(--text-primary)]">{game.name}</h3>
-                        <span className={`badge ${game.isEnabled ? 'badge-success' : 'badge-error'}`}>
+                        <h3 className="text-lg font-semibold text-[var(--text-primary)]">
+                          {game.name}
+                        </h3>
+                        <span
+                          className={`badge ${game.isEnabled ? 'badge-success' : 'badge-error'}`}
+                        >
                           {game.isEnabled ? 'Enabled' : 'Disabled'}
                         </span>
                       </div>
@@ -523,6 +400,11 @@ export function AdminGamesClient({
                               delete next[game.gameId]
                               return next
                             })
+                            setRegionEdits((current) => {
+                              const next = { ...current }
+                              delete next[game.gameId]
+                              return next
+                            })
                           }}
                           className="btn btn-ghost btn-sm"
                         >
@@ -530,7 +412,11 @@ export function AdminGamesClient({
                         </button>
                         <button
                           onClick={() => void saveGameConfig(game.gameId)}
-                          disabled={isSaving || Object.keys(edits).length === 0}
+                          disabled={
+                            isSaving ||
+                            (Object.keys(edits).length === 0 &&
+                              regionEdits[game.gameId] === undefined)
+                          }
                           className="btn btn-primary btn-sm"
                         >
                           <Save className="h-3.5 w-3.5" />
@@ -624,6 +510,37 @@ export function AdminGamesClient({
                         />
                       </div>
                     )}
+
+                    {game.gameId === 'trivia' && (
+                      <div className="col-span-2 sm:col-span-full">
+                        <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-[var(--text-tertiary)]">
+                          <Globe className="h-3.5 w-3.5" />
+                          Question Region
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={regionEdits[game.gameId] ?? readRegionFromConfig(game)}
+                            onChange={(event) =>
+                              updateRegionEdit(
+                                game.gameId,
+                                event.target.value as TriviaRegionChoice,
+                              )
+                            }
+                            className="input appearance-none pr-8"
+                          >
+                            {(['auto', 'international', 'india'] as const).map((value) => (
+                              <option key={value} value={value}>
+                                {REGION_LABEL[value]}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <p className="mt-1.5 text-xs text-[var(--text-tertiary)]">
+                          Auto routes Indian IPs to the India pool and everyone else to
+                          international. Setting a specific region forces it for every room.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -641,6 +558,16 @@ export function AdminGamesClient({
                         {game.roundTime}s
                       </span>
                     )}
+                    {game.gameId === 'trivia' && (() => {
+                      const region = readRegionFromConfig(game)
+                      const Icon = region === 'india' ? MapPin : Globe
+                      return (
+                        <span className="badge badge-primary">
+                          <Icon className="mr-1 h-3 w-3" />
+                          {REGION_LABEL[region]}
+                        </span>
+                      )
+                    })()}
                   </div>
                 )}
               </motion.div>
@@ -648,430 +575,6 @@ export function AdminGamesClient({
           })}
         </div>
       </div>
-
-      <div className="space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold text-[var(--text-primary)]">Trivia Question Browser</h2>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            Search trivia content, inspect answers and usage metadata, and adjust lifecycle state safely.
-          </p>
-        </div>
-
-        <div className="card">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_repeat(4,minmax(0,1fr))]">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
-              <input
-                type="text"
-                value={draftFilters.search}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({ ...current, search: event.target.value }))
-                }
-                placeholder="Search question text, source, or tag"
-                className="input pl-10"
-              />
-            </div>
-
-            <div className="relative">
-              <select
-                value={draftFilters.status}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({ ...current, status: event.target.value }))
-                }
-                className="input appearance-none pr-8"
-              >
-                <option value="">All statuses</option>
-                {availableStatuses.map((status) => (
-                  <option key={status} value={status}>
-                    {STATUS_CONFIG[status]?.label ?? status}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
-            </div>
-
-            <div className="relative">
-              <select
-                value={draftFilters.category}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({ ...current, category: event.target.value }))
-                }
-                className="input appearance-none pr-8"
-              >
-                <option value="">All categories</option>
-                {availableCategories.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
-            </div>
-
-            <div className="relative">
-              <select
-                value={draftFilters.difficulty}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({ ...current, difficulty: event.target.value }))
-                }
-                className="input appearance-none pr-8"
-              >
-                <option value="">All difficulties</option>
-                {availableDifficulties.map((difficulty) => (
-                  <option key={difficulty} value={difficulty}>
-                    {difficulty}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button onClick={applyFilters} className="btn btn-primary btn-sm w-full">
-                Apply
-              </button>
-              <button onClick={resetFilters} className="btn btn-ghost btn-sm w-full">
-                Reset
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="card !p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border)]">
-                  <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                    Question
-                  </th>
-                  <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                    Status
-                  </th>
-                  <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                    Reports
-                  </th>
-                  <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                    Usage
-                  </th>
-                  <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                    Updated
-                  </th>
-                  <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                    Inspect
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {triviaQuestions.length > 0 ? (
-                  triviaQuestions.map((question) => (
-                    <tr
-                      key={question.id}
-                      className="border-b border-[var(--border-subtle)] transition-colors hover:bg-[var(--surface-hover)]"
-                    >
-                      <td className="px-5 py-4">
-                        <div>
-                          <p className="font-medium text-[var(--text-primary)]">{question.question}</p>
-                          <p className="mt-1 text-xs text-[var(--text-tertiary)]">
-                            {question.category} · {question.difficulty} · {question.source}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className={`badge ${STATUS_CONFIG[question.status]?.badge ?? 'badge-primary'}`}>
-                          {STATUS_CONFIG[question.status]?.label ?? question.status}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 font-semibold text-[var(--text-primary)]">
-                        {question.reportCount}
-                      </td>
-                      <td className="px-5 py-4 text-[var(--text-secondary)]">
-                        {question.usageCount}
-                      </td>
-                      <td className="px-5 py-4 text-[var(--text-tertiary)]">
-                        {formatRelative(question.updatedAt)}
-                      </td>
-                      <td className="px-5 py-4">
-                        <button
-                          onClick={() => openQuestion(question)}
-                          className="btn btn-ghost btn-sm"
-                        >
-                          <Eye className="h-4 w-4" />
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center">
-                      <FileText className="mx-auto mb-3 h-10 w-10 text-[var(--text-tertiary)]" />
-                      <p className="text-sm font-medium text-[var(--text-secondary)]">
-                        No trivia questions matched these filters
-                      </p>
-                      <p className="mt-1 text-xs text-[var(--text-tertiary)]">
-                        Try clearing one of the filters or broadening the search.
-                      </p>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex flex-col gap-3 border-t border-[var(--border)] px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-[var(--text-tertiary)]">
-              Page {filters.page} of {totalTriviaPages} with {totalTriviaCount} question
-              {totalTriviaCount === 1 ? '' : 's'}.
-            </p>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-[var(--text-tertiary)]">{triviaPageSize} per page</span>
-              <button
-                onClick={() => pushFilters({ page: filters.page - 1 })}
-                disabled={filters.page <= 1}
-                className="btn btn-ghost btn-sm"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Prev
-              </button>
-              <button
-                onClick={() => pushFilters({ page: filters.page + 1 })}
-                disabled={filters.page >= totalTriviaPages}
-                className="btn btn-ghost btn-sm"
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {selectedQuestion && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
-          <div className="absolute inset-0" onClick={() => setSelectedQuestion(null)} aria-hidden="true" />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="relative z-10 max-h-[90vh] w-full max-w-5xl overflow-auto rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-2xl"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
-                  Trivia Content
-                </p>
-                <h2 className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
-                  {selectedQuestion.question}
-                </h2>
-              </div>
-              <button
-                onClick={() => setSelectedQuestion(null)}
-                className="btn btn-ghost btn-sm !p-2"
-                aria-label="Close trivia question details"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-              <div className="space-y-6">
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--background)] p-5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`badge ${STATUS_CONFIG[selectedQuestion.status]?.badge ?? 'badge-primary'}`}>
-                      {STATUS_CONFIG[selectedQuestion.status]?.label ?? selectedQuestion.status}
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-secondary)]">
-                      <ShieldAlert className="h-3 w-3" />
-                      {selectedQuestion.reportCount} reports
-                    </span>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-[var(--text-tertiary)]">Category</p>
-                      <p className="mt-1 font-medium text-[var(--text-primary)]">{selectedQuestion.category}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-[var(--text-tertiary)]">Difficulty</p>
-                      <p className="mt-1 font-medium text-[var(--text-primary)]">{selectedQuestion.difficulty}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-[var(--text-tertiary)]">Source</p>
-                      <p className="mt-1 font-medium text-[var(--text-primary)]">{selectedQuestion.source}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-[var(--text-tertiary)]">Last Used</p>
-                      <p className="mt-1 font-medium text-[var(--text-primary)]">{formatRelative(selectedQuestion.lastUsedAt)}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {selectedQuestion.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="rounded-full bg-[var(--surface)] px-2.5 py-1 text-[11px] text-[var(--text-tertiary)]"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--background)] p-5">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                    Answers
-                  </p>
-                  <div className="mt-4 space-y-2">
-                    {parseAnswers(selectedQuestion.answers).map((answer) => (
-                      <div
-                        key={answer.id}
-                        className={`rounded-xl border px-4 py-3 text-sm ${
-                          answer.id === selectedQuestion.correctId
-                            ? 'border-[var(--success-500)]/30 bg-[var(--success-500)]/10'
-                            : 'border-[var(--border)] bg-[var(--surface)]'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <span className="font-medium text-[var(--text-primary)]">{answer.text}</span>
-                          {answer.id === selectedQuestion.correctId && (
-                            <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-[var(--success-500)]" />
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {selectedQuestion.explanation && (
-                    <div className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                        Explanation
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-                        {selectedQuestion.explanation}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--background)] p-5">
-                  <div className="flex items-center gap-2">
-                    <BookOpen className="h-4 w-4 text-[var(--primary-500)]" />
-                    <p className="text-sm font-semibold text-[var(--text-primary)]">Recent Review Activity</p>
-                  </div>
-
-                  {selectedQuestion.recentActions.length > 0 ? (
-                    <div className="mt-4 space-y-3">
-                      {selectedQuestion.recentActions.map((entry) => (
-                        <div
-                          key={entry.id}
-                          className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-medium text-[var(--text-primary)]">
-                                {getHistoryActionLabel(entry.action)}
-                              </p>
-                              <p className="mt-1 text-xs text-[var(--text-tertiary)]">
-                                by {entry.actorName}
-                                {entry.actorEmail ? ` (${entry.actorEmail})` : ''}
-                              </p>
-                            </div>
-                            <span className="text-xs text-[var(--text-tertiary)]">
-                              {formatRelative(entry.createdAt)}
-                            </span>
-                          </div>
-                          {entry.details && (
-                            <pre className="mt-3 overflow-auto rounded-lg bg-[var(--background)] p-3 text-[11px] text-[var(--text-secondary)]">
-                              {JSON.stringify(entry.details, null, 2)}
-                            </pre>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-4 text-sm text-[var(--text-tertiary)]">
-                      No admin history recorded for this question yet.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--background)] p-5">
-                  <p className="text-sm font-semibold text-[var(--text-primary)]">Lifecycle Controls</p>
-                  <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
-                    Change the availability state for this question without opening the moderation queue.
-                  </p>
-
-                  <label className="mt-4 block">
-                    <span className="mb-2 block text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                      Status
-                    </span>
-                    <div className="relative">
-                      <select
-                        value={questionStatusDraft}
-                        onChange={(event) => setQuestionStatusDraft(event.target.value)}
-                        className="input appearance-none pr-8"
-                      >
-                        {availableStatuses.map((status) => (
-                          <option key={status} value={status}>
-                            {STATUS_CONFIG[status]?.label ?? status}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
-                    </div>
-                  </label>
-
-                  <label className="mt-4 block">
-                    <span className="mb-2 block text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                      Note
-                    </span>
-                    <textarea
-                      value={questionStatusNote}
-                      onChange={(event) => setQuestionStatusNote(event.target.value)}
-                      rows={4}
-                      placeholder="Optional note for the audit log..."
-                      className="input min-h-[112px] resize-none"
-                    />
-                  </label>
-
-                  <div className="mt-4 flex gap-2">
-                    <button
-                      onClick={() => void updateQuestionStatus()}
-                      disabled={
-                        updatingQuestionId === selectedQuestion.id ||
-                        questionStatusDraft === selectedQuestion.status
-                      }
-                      className="btn btn-primary btn-sm"
-                    >
-                      {updatingQuestionId === selectedQuestion.id ? 'Updating...' : 'Update Status'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--background)] p-5">
-                  <p className="text-sm font-semibold text-[var(--text-primary)]">Question Metadata</p>
-                  <dl className="mt-4 space-y-3 text-sm">
-                    {[
-                      { label: 'Created', value: formatDateTime(selectedQuestion.createdAt) },
-                      { label: 'Updated', value: formatDateTime(selectedQuestion.updatedAt) },
-                      { label: 'Usage Count', value: String(selectedQuestion.usageCount) },
-                      { label: 'Correct Count', value: String(selectedQuestion.correctCount) },
-                      { label: 'Reports', value: String(selectedQuestion.reportCount) },
-                    ].map((item) => (
-                      <div key={item.label} className="flex items-start justify-between gap-4">
-                        <dt className="text-[var(--text-tertiary)]">{item.label}</dt>
-                        <dd className="text-right font-medium text-[var(--text-primary)]">{item.value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
     </div>
   )
 }

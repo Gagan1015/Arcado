@@ -34,7 +34,7 @@ async function getAdminGameDefaults(gameId: string) {
   try {
     return await prisma.gameConfig.findUnique({
       where: { gameId },
-      select: { defaultRounds: true, roundTime: true },
+      select: { defaultRounds: true, roundTime: true, settings: true },
     })
   } catch {
     return null
@@ -54,6 +54,8 @@ async function getTriviaSettings(room: Room): Promise<GameSettings> {
   const adminConfig = await getAdminGameDefaults('trivia')
   const adminRoundTime = adminConfig?.roundTime ?? undefined
 
+  const resolvedRegion = resolveTriviaRegion(room, adminConfig)
+
   return {
     rounds: getConfiguredRounds(room, adminConfig?.defaultRounds, FALLBACK_ROUNDS.trivia),
     maxPlayers: room.maxPlayers,
@@ -61,7 +63,52 @@ async function getTriviaSettings(room: Room): Promise<GameSettings> {
     triviaCategories: configuredCategories,
     triviaDifficulty: room.settings?.triviaDifficulty,
     triviaTimeLimit: room.settings?.triviaTimeLimit ?? adminRoundTime,
+    triviaRegion: room.settings?.triviaRegion,
+    triviaResolvedRegion: resolvedRegion,
   }
+}
+
+/**
+ * Decide which regional trivia pool to draw from:
+ *   1. `room.settings.triviaResolvedRegion` already set (e.g. by the room
+ *      creation endpoint that inspected the creator's country). Use it.
+ *   2. `room.settings.triviaRegion` explicitly 'india' or 'international'.
+ *   3. Admin default stored on `GameConfig.settings.triviaRegion`.
+ *   4. Fall back to 'international'.
+ *
+ * When the host's preference is 'auto' but the room has no resolved region
+ * yet, we stick with the admin default instead of blocking — the room
+ * creation path is expected to supply it up front.
+ */
+function resolveTriviaRegion(
+  room: Room,
+  adminConfig: Awaited<ReturnType<typeof getAdminGameDefaults>>
+): 'international' | 'india' {
+  const explicitlyResolved = room.settings?.triviaResolvedRegion
+  if (explicitlyResolved === 'india' || explicitlyResolved === 'international') {
+    return explicitlyResolved
+  }
+
+  const hostPreference = room.settings?.triviaRegion
+  if (hostPreference === 'india' || hostPreference === 'international') {
+    return hostPreference
+  }
+
+  const adminDefault = readStringSetting(adminConfig?.settings, 'triviaRegion')
+  if (adminDefault === 'india' || adminDefault === 'international') {
+    return adminDefault
+  }
+
+  return 'international'
+}
+
+function readStringSetting(
+  settings: unknown,
+  key: string
+): string | undefined {
+  if (!settings || typeof settings !== 'object') return undefined
+  const value = (settings as Record<string, unknown>)[key]
+  return typeof value === 'string' ? value : undefined
 }
 
 async function getConfiguredGameSettings(

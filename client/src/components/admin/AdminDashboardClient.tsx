@@ -3,19 +3,24 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import {
-  Users,
+  Activity,
+  ArrowRight,
+  BarChart3,
+  Calendar,
+  Circle,
+  Clock,
   DoorOpen,
   Gamepad2,
-  Trophy,
+  Hash,
   TrendingUp,
-  ArrowRight,
-  Clock,
-  Activity,
-  BarChart3,
+  Trophy,
+  Type,
+  Users,
 } from 'lucide-react'
 import Link from 'next/link'
 import { staggerContainer, staggerItem } from '@/lib/motion'
 import { GameIcon } from '@/components/ui/GameIcons'
+import { AdminTable, AdminTableChip } from './AdminTable'
 
 interface DashboardStats {
   totalUsers: number
@@ -105,6 +110,14 @@ const STATUS_BADGE: Record<string, string> = {
   FINISHED: 'badge-warning',
   ACTIVE: 'badge-success',
   BANNED: 'badge-error',
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  WAITING: 'var(--primary-500)',
+  PLAYING: 'var(--success-500)',
+  FINISHED: 'var(--warning-500)',
+  ACTIVE: 'var(--success-500)',
+  BANNED: 'var(--error-500)',
 }
 
 function formatTimeAgo(dateString: string): string {
@@ -477,53 +490,67 @@ export function AdminDashboardClient({
             </Link>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border)]">
-                  <th className="pb-3 pr-4 text-xs font-medium text-[var(--text-tertiary)]">Code</th>
-                  <th className="pb-3 pr-4 text-xs font-medium text-[var(--text-tertiary)]">Game</th>
-                  <th className="pb-3 pr-4 text-xs font-medium text-[var(--text-tertiary)]">Status</th>
-                  <th className="pb-3 pr-4 text-xs font-medium text-[var(--text-tertiary)]">Players</th>
-                  <th className="pb-3 text-xs font-medium text-[var(--text-tertiary)]">Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentRooms.length > 0 ? (
-                  recentRooms.map((room) => (
-                    <tr key={room.id} className="border-b border-[var(--border-subtle)]">
-                      <td className="py-3 pr-4">
-                        <span className="font-mono text-xs font-bold tracking-wider text-[var(--text-primary)]">
-                          {room.code}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-4">
-                        <span className="flex items-center gap-1.5 text-[var(--text-secondary)]">
-                          <GameIcon gameId={room.gameId} size={16} />
-                          {room.gameId}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-4">
-                        <span className={`badge ${STATUS_BADGE[room.status] || 'badge-primary'}`}>
-                          {room.status}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-4 text-[var(--text-secondary)]">{room.playerCount}</td>
-                      <td className="py-3 text-xs text-[var(--text-tertiary)]">
-                        {formatTimeAgo(room.createdAt)}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="py-8 text-center text-[var(--text-tertiary)]">
-                      No rooms created yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <AdminTable<RecentRoom>
+            rows={recentRooms}
+            rowKey={(room) => room.id}
+            hideRowNumbers
+            empty={{ title: 'No rooms created yet.' }}
+            columns={[
+              {
+                key: 'code',
+                label: 'Code',
+                icon: Hash,
+                width: 'minmax(6rem, 8rem)',
+                render: (room) => (
+                  <span className="font-mono text-xs font-bold tracking-wider text-[var(--text-primary)]">
+                    {room.code}
+                  </span>
+                ),
+              },
+              {
+                key: 'game',
+                label: 'Game',
+                icon: Type,
+                width: 'minmax(8rem, 10rem)',
+                render: (room) => (
+                  <span className="flex items-center gap-1.5 text-[var(--text-secondary)]">
+                    <GameIcon gameId={room.gameId} size={14} />
+                    {room.gameId}
+                  </span>
+                ),
+              },
+              {
+                key: 'status',
+                label: 'Status',
+                icon: Circle,
+                width: 'minmax(7rem, 9rem)',
+                render: (room) => (
+                  <AdminTableChip color={STATUS_COLOR[room.status]}>{room.status}</AdminTableChip>
+                ),
+              },
+              {
+                key: 'players',
+                label: 'Players',
+                icon: Users,
+                width: '6rem',
+                align: 'center',
+                render: (room) => (
+                  <span className="text-[var(--text-secondary)]">{room.playerCount}</span>
+                ),
+              },
+              {
+                key: 'created',
+                label: 'Created',
+                icon: Calendar,
+                width: 'minmax(6rem, 9rem)',
+                render: (room) => (
+                  <span className="text-xs text-[var(--text-tertiary)]">
+                    {formatTimeAgo(room.createdAt)}
+                  </span>
+                ),
+              },
+            ]}
+          />
         </motion.div>
       </div>
 

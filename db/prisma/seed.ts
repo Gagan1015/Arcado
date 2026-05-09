@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 
 import { triviaSeedQuestions } from './triviaSeedData'
+import { triviaSeedQuestionsIndia } from './triviaSeedDataIndia'
 
 const prisma = new PrismaClient()
 
@@ -54,7 +55,7 @@ async function main() {
 
   await prisma.triviaQuestion.deleteMany({})
   await prisma.triviaQuestion.createMany({
-    data: triviaSeedQuestions,
+    data: [...triviaSeedQuestions, ...triviaSeedQuestionsIndia],
   })
 
   await prisma.systemSetting.upsert({

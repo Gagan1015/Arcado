@@ -743,3 +743,177 @@ html[data-theme-transition='bottom-left']::view-transition-new(root) {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-strong);
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Admin table (Airtable-inspired)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.admin-table-shell {
+  --admin-table-border: var(--border);
+  --admin-table-border-subtle: var(--border-subtle, var(--border));
+  --admin-table-header-bg: color-mix(in srgb, var(--surface-hover) 55%, transparent);
+  --admin-table-row-hover: color-mix(in srgb, var(--surface-hover) 70%, transparent);
+  --admin-table-chip-bg: color-mix(in srgb, var(--surface-hover) 75%, transparent);
+  --admin-table-accent: var(--primary-400, var(--primary-500));
+  --admin-table-index-color: var(--text-tertiary);
+
+  border: 1px solid var(--admin-table-border);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.admin-table-scroll {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.admin-table-col-index {
+  width: 52px;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────── */
+.admin-table thead tr {
+  background: var(--admin-table-header-bg);
+}
+
+.admin-table-th {
+  padding: 12px 16px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  text-transform: none;
+  border-bottom: 1px solid var(--admin-table-border);
+  border-right: 1px solid var(--admin-table-border-subtle);
+  background: var(--admin-table-header-bg);
+  text-align: left;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.admin-table-th-last {
+  border-right: none;
+}
+
+.admin-table-th-index {
+  width: 52px;
+  padding: 12px 8px;
+  text-align: center;
+  color: transparent;
+}
+
+.admin-table-th-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+
+.admin-table-th-icon {
+  width: 13px;
+  height: 13px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+/* ── Body ─────────────────────────────────────────────────────────────── */
+.admin-table-row {
+  transition: background-color 120ms ease;
+}
+
+.admin-table-row:hover {
+  background: var(--admin-table-row-hover);
+}
+
+.admin-table-row-clickable {
+  cursor: pointer;
+}
+
+.admin-table-td {
+  padding: 12px 16px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--admin-table-border-subtle);
+  border-right: 1px solid var(--admin-table-border-subtle);
+  color: var(--text-secondary);
+}
+
+.admin-table-td-last {
+  border-right: none;
+}
+
+.admin-table tbody tr:last-child .admin-table-td,
+.admin-table tbody tr:last-child .admin-table-td-index {
+  border-bottom: none;
+}
+
+.admin-table-td-index {
+  width: 52px;
+  padding: 12px 8px;
+  text-align: center;
+  font-feature-settings: 'tnum';
+  color: var(--admin-table-index-color);
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-right: 1px solid var(--admin-table-border-subtle);
+}
+
+.admin-table-align-left {
+  text-align: left;
+}
+.admin-table-align-center {
+  text-align: center;
+}
+.admin-table-align-right {
+  text-align: right;
+}
+
+.admin-table-empty {
+  border-right: none;
+}
+
+/* ── Footer ───────────────────────────────────────────────────────────── */
+.admin-table-footer {
+  border-top: 1px solid var(--admin-table-border);
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--surface-hover) 35%, transparent);
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+}
+
+/* ── Cell helpers ─────────────────────────────────────────────────────── */
+.admin-table-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--admin-table-border);
+  background: var(--admin-table-chip-bg);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.admin-table-link {
+  color: var(--admin-table-accent);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  transition: color 120ms ease;
+}
+
+.admin-table-link:hover {
+  color: var(--primary-300, var(--primary-400));
+}

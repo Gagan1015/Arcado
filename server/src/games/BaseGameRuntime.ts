@@ -114,14 +114,37 @@ export abstract class BaseGameRuntime implements IGameRuntime {
   getResults(): GameResultData[] {
     const sortedScores = Array.from(this.scores.entries()).sort((left, right) => right[1] - left[1])
     const highestScore = sortedScores[0]?.[1] ?? 0
+    const soloMode = this.isSoloMode()
 
     return sortedScores.map(([playerId, score], index) => ({
       playerId,
       score,
       rank: index + 1,
-      isWinner: score === highestScore,
+      isWinner: soloMode
+        ? this.determineSoloWinner(playerId, score)
+        : score > 0 && score === highestScore,
+      isSolo: soloMode,
       metadata: this.buildResultMetadata(playerId),
     }))
+  }
+
+  protected isSoloMode(): boolean {
+    return this.players.size <= 1
+  }
+
+  /**
+   * Decide whether a player in a solo run counts as a "winner".
+   *
+   * In solo mode there is only one player, so ranking by score does not work.
+   * Each game runtime overrides this to apply its own completion rule, for
+   * example "solved the word" (Wordel), "identified the country" (Flagel),
+   * or "answered enough questions correctly" (Trivia).
+   *
+   * Default fallback: the player must have scored at least one point. Games
+   * that cannot be played solo (e.g. Skribble) will never hit this path.
+   */
+  protected determineSoloWinner(_playerId: UserId, score: number): boolean {
+    return score > 0
   }
 
   protected getConnectedPlayers() {
@@ -204,6 +227,7 @@ export abstract class BaseGameRuntime implements IGameRuntime {
           score: result.score,
           rank: result.rank,
           isWinner: result.isWinner,
+          isSolo: result.isSolo,
           duration: durationSeconds,
           metadata: result.metadata as Prisma.InputJsonValue | undefined,
         },
@@ -218,16 +242,30 @@ export abstract class BaseGameRuntime implements IGameRuntime {
         },
       })
 
+      const winDelta = result.isWinner ? 1 : 0
+      const timeDelta = durationSeconds ?? 0
+      const isSolo = result.isSolo
+
       if (!existingStat) {
         await prisma.gameStat.create({
           data: {
             userId: result.playerId,
             gameId: this.gameId,
             gamesPlayed: 1,
-            gamesWon: result.isWinner ? 1 : 0,
+            gamesWon: winDelta,
             totalScore: result.score,
             highScore: result.score,
-            totalTime: durationSeconds ?? 0,
+            totalTime: timeDelta,
+            gamesPlayedSolo: isSolo ? 1 : 0,
+            gamesWonSolo: isSolo ? winDelta : 0,
+            totalScoreSolo: isSolo ? result.score : 0,
+            highScoreSolo: isSolo ? result.score : 0,
+            totalTimeSolo: isSolo ? timeDelta : 0,
+            gamesPlayedMulti: isSolo ? 0 : 1,
+            gamesWonMulti: isSolo ? 0 : winDelta,
+            totalScoreMulti: isSolo ? 0 : result.score,
+            highScoreMulti: isSolo ? 0 : result.score,
+            totalTimeMulti: isSolo ? 0 : timeDelta,
           },
         })
       } else {
@@ -240,10 +278,25 @@ export abstract class BaseGameRuntime implements IGameRuntime {
           },
           data: {
             gamesPlayed: existingStat.gamesPlayed + 1,
-            gamesWon: existingStat.gamesWon + (result.isWinner ? 1 : 0),
+            gamesWon: existingStat.gamesWon + winDelta,
             totalScore: existingStat.totalScore + result.score,
             highScore: Math.max(existingStat.highScore, result.score),
-            totalTime: existingStat.totalTime + (durationSeconds ?? 0),
+            totalTime: existingStat.totalTime + timeDelta,
+            ...(isSolo
+              ? {
+                  gamesPlayedSolo: existingStat.gamesPlayedSolo + 1,
+                  gamesWonSolo: existingStat.gamesWonSolo + winDelta,
+                  totalScoreSolo: existingStat.totalScoreSolo + result.score,
+                  highScoreSolo: Math.max(existingStat.highScoreSolo, result.score),
+                  totalTimeSolo: existingStat.totalTimeSolo + timeDelta,
+                }
+              : {
+                  gamesPlayedMulti: existingStat.gamesPlayedMulti + 1,
+                  gamesWonMulti: existingStat.gamesWonMulti + winDelta,
+                  totalScoreMulti: existingStat.totalScoreMulti + result.score,
+                  highScoreMulti: Math.max(existingStat.highScoreMulti, result.score),
+                  totalTimeMulti: existingStat.totalTimeMulti + timeDelta,
+                }),
           },
         })
       }

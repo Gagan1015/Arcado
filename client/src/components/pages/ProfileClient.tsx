@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'motion/react'
 import Link from 'next/link'
 import { Eye } from 'lucide-react'
@@ -15,6 +15,7 @@ interface RecentResult {
   score: number
   rank: number | null
   isWinner: boolean
+  isSolo: boolean
   createdAt: string
   room: { code: string }
 }
@@ -42,6 +43,16 @@ interface GameStatData {
   totalScore: number
   highScore: number
   totalTime: number
+  gamesPlayedSolo: number
+  gamesWonSolo: number
+  totalScoreSolo: number
+  highScoreSolo: number
+  totalTimeSolo: number
+  gamesPlayedMulti: number
+  gamesWonMulti: number
+  totalScoreMulti: number
+  highScoreMulti: number
+  totalTimeMulti: number
 }
 
 interface ProfileClientProps {
@@ -49,6 +60,54 @@ interface ProfileClientProps {
   recentResults: RecentResult[]
   activeRooms: number
   gameStats: GameStatData[]
+}
+
+type StatMode = 'all' | 'solo' | 'multi'
+
+type AggregatedGameStat = {
+  id: string
+  gameId: string
+  gamesPlayed: number
+  gamesWon: number
+  totalScore: number
+  highScore: number
+  totalTime: number
+}
+
+function projectStatForMode(stat: GameStatData, mode: StatMode): AggregatedGameStat {
+  if (mode === 'solo') {
+    return {
+      id: stat.id,
+      gameId: stat.gameId,
+      gamesPlayed: stat.gamesPlayedSolo,
+      gamesWon: stat.gamesWonSolo,
+      totalScore: stat.totalScoreSolo,
+      highScore: stat.highScoreSolo,
+      totalTime: stat.totalTimeSolo,
+    }
+  }
+
+  if (mode === 'multi') {
+    return {
+      id: stat.id,
+      gameId: stat.gameId,
+      gamesPlayed: stat.gamesPlayedMulti,
+      gamesWon: stat.gamesWonMulti,
+      totalScore: stat.totalScoreMulti,
+      highScore: stat.highScoreMulti,
+      totalTime: stat.totalTimeMulti,
+    }
+  }
+
+  return {
+    id: stat.id,
+    gameId: stat.gameId,
+    gamesPlayed: stat.gamesPlayed,
+    gamesWon: stat.gamesWon,
+    totalScore: stat.totalScore,
+    highScore: stat.highScore,
+    totalTime: stat.totalTime,
+  }
 }
 
 /* ── Helpers ── */
@@ -165,11 +224,31 @@ export default function ProfileClient({
   activeRooms,
   gameStats,
 }: ProfileClientProps) {
-  const totalGames = profile._count.gameResults
-  const totalWins = gameStats.reduce((s, g) => s + g.gamesWon, 0)
+  const [mode, setMode] = useState<StatMode>('all')
+
+  const projectedStats = useMemo(
+    () => gameStats.map((stat) => projectStatForMode(stat, mode)),
+    [gameStats, mode]
+  )
+  const visibleStats = useMemo(
+    () => projectedStats.filter((s) => s.gamesPlayed > 0),
+    [projectedStats]
+  )
+
+  const filteredRecentResults = useMemo(() => {
+    if (mode === 'all') return recentResults
+    return recentResults.filter((r) => (mode === 'solo' ? r.isSolo : !r.isSolo))
+  }, [recentResults, mode])
+
+  // Totals derived from the selected mode. We intentionally ignore
+  // profile._count.gameResults here because that is a lifetime count
+  // across every mode and would skew per-mode win rate calculations.
+  const totalGames = projectedStats.reduce((s, g) => s + g.gamesPlayed, 0)
+  const totalWins = projectedStats.reduce((s, g) => s + g.gamesWon, 0)
   const winRate = totalGames > 0 ? Math.round((totalWins / totalGames) * 100) : 0
+  // XP is based on lifetime combined score so levels persist across modes.
   const totalScore = gameStats.reduce((s, g) => s + g.totalScore, 0)
-  const recentScores = recentResults.map((r) => r.score).reverse()
+  const recentScores = filteredRecentResults.map((r) => r.score).reverse()
 
   // XP system: triangular curve so each level costs more than the last.
   //   xp required to advance from level L to L+1   = 100 * L
@@ -180,7 +259,7 @@ export default function ProfileClient({
 
 
 
-  const gameBars = gameStats.map((g) => ({
+  const gameBars = visibleStats.map((g) => ({
     label: GAME_LABELS[g.gameId] ?? g.gameId,
     value: g.totalScore,
     color: GAME_COLORS[g.gameId] ?? 'var(--marketing-accent)',
@@ -309,7 +388,7 @@ export default function ProfileClient({
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-tertiary)]">Games Recorded</p>
-            <p className="mt-1 text-sm font-medium text-[var(--text-primary)]">{totalGames}</p>
+            <p className="mt-1 text-sm font-medium text-[var(--text-primary)]">{profile._count.gameResults}</p>
           </div>
         </div>
       </motion.div>
@@ -320,7 +399,12 @@ export default function ProfileClient({
           { label: 'Rooms created', value: profile._count.roomsCreated, delay: 0 },
           { label: 'Rooms joined', value: profile._count.roomPlayers, delay: 1 },
           { label: 'Active rooms', value: activeRooms, delay: 2 },
-          { label: 'Win rate', value: `${winRate}%`, delay: 3 },
+          {
+            label:
+              mode === 'solo' ? 'Solo win rate' : mode === 'multi' ? 'Multi win rate' : 'Win rate',
+            value: `${winRate}%`,
+            delay: 3,
+          },
         ].map((card, i) => (
           <motion.div
             key={card.label}
@@ -356,16 +440,46 @@ export default function ProfileClient({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
           >
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
-              Skills
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
-              Game proficiency
-            </h2>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+                  Skills
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                  Game proficiency
+                </h2>
+              </div>
+              <div
+                role="tablist"
+                aria-label="Stats mode"
+                className="inline-flex rounded-full border border-[var(--border)] bg-[var(--background)]/55 p-1"
+              >
+                {(['all', 'solo', 'multi'] as const).map((value) => {
+                  const isActive = mode === value
+                  const label = value === 'all' ? 'All' : value === 'solo' ? 'Solo' : 'Multi'
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() => setMode(value)}
+                      className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                        isActive
+                          ? 'bg-[var(--marketing-accent)] text-[var(--marketing-accent-foreground,white)]'
+                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
 
-            {gameStats.length > 0 ? (
+            {visibleStats.length > 0 ? (
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                {gameStats.map((stat, idx) => {
+                {visibleStats.map((stat, idx) => {
                   const gameWinRate = stat.gamesPlayed > 0 ? Math.round((stat.gamesWon / stat.gamesPlayed) * 100) : 0
                   return (
                     <motion.div
@@ -406,7 +520,11 @@ export default function ProfileClient({
               </div>
             ) : (
               <div className="mt-6 rounded-[20px] border border-dashed border-[var(--border)] px-4 py-8 text-center text-sm text-[var(--text-secondary)]">
-                No game stats yet. Play your first game to unlock your skill cards.
+                {mode === 'solo'
+                  ? 'No solo games played yet. Try a quick solo round of Wordel, Flagel, or Trivia.'
+                  : mode === 'multi'
+                    ? 'No multiplayer games yet. Invite friends and jump into a room.'
+                    : 'No game stats yet. Play your first game to unlock your skill cards.'}
               </div>
             )}
           </motion.div>
@@ -436,8 +554,8 @@ export default function ProfileClient({
             </div>
 
             <div className="mt-6 space-y-3">
-              {recentResults.length > 0 ? (
-                recentResults.map((result, i) => (
+              {filteredRecentResults.length > 0 ? (
+                filteredRecentResults.map((result, i) => (
                   <motion.div
                     key={result.id}
                     className="rounded-[20px] border border-[var(--border)] bg-[var(--background)]/55 transition-colors hover:bg-[var(--surface-hover)]"
@@ -453,9 +571,17 @@ export default function ProfileClient({
                       <div className="flex items-center gap-3">
                         <GameIcon gameId={result.gameId} size={28} />
                         <div>
-                          <p className="text-sm font-semibold text-[var(--text-primary)]">
-                            {GAME_LABELS[result.gameId] ?? result.gameId}
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-[var(--text-primary)]">
+                              {GAME_LABELS[result.gameId] ?? result.gameId}
+                            </p>
+                            <span
+                              className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-tertiary)]"
+                              style={{ background: 'var(--surface-hover)' }}
+                            >
+                              {result.isSolo ? 'Solo' : 'Multi'}
+                            </span>
+                          </div>
                           <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
                             Room {result.room.code} · <RelativeTime value={result.createdAt} />
                           </p>
@@ -464,12 +590,14 @@ export default function ProfileClient({
                       <div className="flex flex-wrap items-center gap-3 text-sm sm:justify-end">
                         {result.isWinner && (
                           <span className="rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--success-500)' }}>
-                            Winner
+                            {result.isSolo ? 'Solved' : 'Winner'}
                           </span>
                         )}
-                        <span className="rounded-full bg-[var(--surface)] px-3 py-1 font-medium text-[var(--text-secondary)]">
-                          {result.rank != null ? `#${result.rank}` : 'Done'}
-                        </span>
+                        {!result.isSolo && (
+                          <span className="rounded-full bg-[var(--surface)] px-3 py-1 font-medium text-[var(--text-secondary)]">
+                            {result.rank != null ? `#${result.rank}` : 'Done'}
+                          </span>
+                        )}
                         <span className="font-semibold font-mono text-[var(--text-primary)]">
                           {result.score} pts
                         </span>
@@ -486,7 +614,11 @@ export default function ProfileClient({
                 ))
               ) : (
                 <div className="rounded-[20px] border border-dashed border-[var(--border)] px-4 py-6 text-sm text-[var(--text-secondary)]">
-                  No finished games yet. Jump into the lobby and start a round.
+                  {mode === 'solo'
+                    ? 'No recent solo games yet. Start a solo round to see them here.'
+                    : mode === 'multi'
+                      ? 'No recent multiplayer games yet. Invite friends to get going.'
+                      : 'No finished games yet. Jump into the lobby and start a round.'}
                 </div>
               )}
             </div>
@@ -502,9 +634,14 @@ export default function ProfileClient({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
           >
-            <p className="self-start text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
-              Performance
-            </p>
+            <div className="flex w-full items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+                Performance
+              </p>
+              <span className="rounded-full bg-[var(--surface-hover)] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-tertiary)]">
+                {mode === 'solo' ? 'Solo' : mode === 'multi' ? 'Multi' : 'All'}
+              </span>
+            </div>
             <ProgressRing value={winRate} size={140} strokeWidth={14} label="Win rate" className="mt-4" />
             <div className="mt-5 grid w-full grid-cols-2 gap-4 border-t border-[var(--border)] pt-4 text-center">
               <div>

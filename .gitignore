@@ -44,3 +44,6 @@ coverage
 
 # Prisma
 prisma/migrations/**/migration_lock.toml
+
+# TypeScript incremental build cache
+*.tsbuildinfo

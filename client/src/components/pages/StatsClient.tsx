@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import Link from 'next/link'
 import { Eye } from 'lucide-react'
@@ -21,6 +22,16 @@ interface GameStatData {
   totalScore: number
   highScore: number
   totalTime: number
+  gamesPlayedSolo: number
+  gamesWonSolo: number
+  totalScoreSolo: number
+  highScoreSolo: number
+  totalTimeSolo: number
+  gamesPlayedMulti: number
+  gamesWonMulti: number
+  totalScoreMulti: number
+  highScoreMulti: number
+  totalTimeMulti: number
 }
 
 interface RecentResult {
@@ -29,6 +40,7 @@ interface RecentResult {
   score: number
   rank: number | null
   isWinner: boolean
+  isSolo: boolean
   duration: number | null
   createdAt: string
   room: { code: string }
@@ -37,6 +49,61 @@ interface RecentResult {
 interface StatsClientProps {
   gameStats: GameStatData[]
   recentResults: RecentResult[]
+}
+
+type StatMode = 'all' | 'solo' | 'multi'
+
+/**
+ * Games that cannot be played solo. The stats page still shows them when mode
+ * is "solo" but with a disabled/empty treatment so the UI stays predictable
+ * even if someone lands on the tab with no solo data.
+ */
+const MULTIPLAYER_ONLY_GAMES = new Set<string>(['skribble'])
+
+type AggregatedGameStat = {
+  id: string
+  gameId: string
+  gamesPlayed: number
+  gamesWon: number
+  totalScore: number
+  highScore: number
+  totalTime: number
+}
+
+function projectStatForMode(stat: GameStatData, mode: StatMode): AggregatedGameStat {
+  if (mode === 'solo') {
+    return {
+      id: stat.id,
+      gameId: stat.gameId,
+      gamesPlayed: stat.gamesPlayedSolo,
+      gamesWon: stat.gamesWonSolo,
+      totalScore: stat.totalScoreSolo,
+      highScore: stat.highScoreSolo,
+      totalTime: stat.totalTimeSolo,
+    }
+  }
+
+  if (mode === 'multi') {
+    return {
+      id: stat.id,
+      gameId: stat.gameId,
+      gamesPlayed: stat.gamesPlayedMulti,
+      gamesWon: stat.gamesWonMulti,
+      totalScore: stat.totalScoreMulti,
+      highScore: stat.highScoreMulti,
+      totalTime: stat.totalTimeMulti,
+    }
+  }
+
+  return {
+    id: stat.id,
+    gameId: stat.gameId,
+    gamesPlayed: stat.gamesPlayed,
+    gamesWon: stat.gamesWon,
+    totalScore: stat.totalScore,
+    highScore: stat.highScore,
+    totalTime: stat.totalTime,
+  }
 }
 
 /* ── Helpers ── */
@@ -89,8 +156,27 @@ const stagger = {
    ══════════════════════════════════════════════ */
 
 export default function StatsClient({ gameStats, recentResults }: StatsClientProps) {
+  const [mode, setMode] = useState<StatMode>('all')
+
+  // Project the raw per-mode buckets into a shape the rest of the UI can use.
+  const projectedStats = useMemo(
+    () =>
+      gameStats
+        .map((stat) => projectStatForMode(stat, mode))
+        // Hide games that have no data for the selected mode to avoid showing
+        // empty 0/0 cards that imply 0% win rate. In "all" we still want to
+        // show anything that has activity at all.
+        .filter((stat) => stat.gamesPlayed > 0),
+    [gameStats, mode]
+  )
+
+  const filteredRecentResults = useMemo(() => {
+    if (mode === 'all') return recentResults
+    return recentResults.filter((r) => (mode === 'solo' ? r.isSolo : !r.isSolo))
+  }, [recentResults, mode])
+
   // Aggregate totals
-  const totals = gameStats.reduce(
+  const totals = projectedStats.reduce(
     (acc, stat) => {
       acc.gamesPlayed += stat.gamesPlayed
       acc.gamesWon += stat.gamesWon
@@ -103,35 +189,51 @@ export default function StatsClient({ gameStats, recentResults }: StatsClientPro
   )
 
   const winRate = totals.gamesPlayed > 0 ? Math.round((totals.gamesWon / totals.gamesPlayed) * 100) : 0
-  const favoriteGame = gameStats[0]
+  const favoriteGame = projectedStats[0]
   const avgScore = totals.gamesPlayed > 0 ? Math.round(totals.totalScore / totals.gamesPlayed) : 0
 
   // Chart data
-  const donutSegments = gameStats.map((s) => ({
+  const donutSegments = projectedStats.map((s) => ({
     value: s.gamesPlayed,
     color: GAME_META[s.gameId]?.color ?? 'var(--marketing-accent)',
     label: GAME_META[s.gameId]?.label ?? s.gameId,
   }))
 
-  const scoreBarData = gameStats.map((s) => ({
+  const scoreBarData = projectedStats.map((s) => ({
     label: GAME_META[s.gameId]?.label ?? s.gameId,
     value: s.totalScore,
     color: GAME_META[s.gameId]?.color ?? 'var(--marketing-accent)',
   }))
 
-  const highScoreBarData = gameStats.map((s) => ({
+  const highScoreBarData = projectedStats.map((s) => ({
     label: GAME_META[s.gameId]?.label ?? s.gameId,
     value: s.highScore,
     color: GAME_META[s.gameId]?.color ?? 'var(--marketing-accent)',
   }))
 
-  const recentScores = recentResults.map((r) => r.score).reverse()
+  const recentScores = filteredRecentResults.map((r) => r.score).reverse()
 
-  const winsByGame = gameStats.map((s) => ({
+  const winsByGame = projectedStats.map((s) => ({
     label: GAME_META[s.gameId]?.label ?? s.gameId,
     value: s.gamesWon,
     color: GAME_META[s.gameId]?.color ?? 'var(--marketing-accent)',
   }))
+
+  const modeCopy: Record<StatMode, { label: string; emptyHint: string }> = {
+    all: {
+      label: 'All games',
+      emptyHint: 'No game stats yet. Finish a round and this view will start filling in automatically.',
+    },
+    solo: {
+      label: 'Solo',
+      emptyHint:
+        'No solo games played yet. Fire up a solo round of Wordel, Flagel, or Trivia to see stats here.',
+    },
+    multi: {
+      label: 'Multiplayer',
+      emptyHint: 'No multiplayer games yet. Invite friends and play a round to fill this out.',
+    },
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-14 lg:px-8 lg:py-18">
@@ -161,9 +263,14 @@ export default function StatsClient({ gameStats, recentResults }: StatsClientPro
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
         >
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
-            Favorite game
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+              Favorite game
+            </p>
+            <span className="rounded-full bg-[var(--surface-hover)] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-tertiary)]">
+              {modeCopy[mode].label}
+            </span>
+          </div>
           <div className="mt-3 flex items-center gap-3">
             {favoriteGame && <GameIcon gameId={favoriteGame.gameId} size={36} animated />}
             <p className="text-2xl font-semibold text-[var(--text-primary)]">
@@ -177,6 +284,43 @@ export default function StatsClient({ gameStats, recentResults }: StatsClientPro
           </p>
         </motion.div>
       </motion.div>
+
+      {/* ── Mode toggle ── */}
+      <div className="mt-10 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+            Mode
+          </p>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">
+            Win rates and totals reflect the selected mode.
+          </p>
+        </div>
+        <div
+          role="tablist"
+          aria-label="Stats mode"
+          className="inline-flex rounded-full border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[var(--marketing-shadow)]"
+        >
+          {(['all', 'solo', 'multi'] as const).map((value) => {
+            const isActive = mode === value
+            return (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setMode(value)}
+                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+                  isActive
+                    ? 'bg-[var(--marketing-accent)] text-[var(--marketing-accent-foreground,white)]'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                {modeCopy[value].label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
 
       {/* ── Top Stat Cards ── */}
       <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -363,10 +507,11 @@ export default function StatsClient({ gameStats, recentResults }: StatsClientPro
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
-            {gameStats.length > 0 ? (
-              gameStats.map((stat, idx) => {
+            {projectedStats.length > 0 ? (
+              projectedStats.map((stat, idx) => {
                 const game = GAME_META[stat.gameId] ?? { label: stat.gameId, color: 'var(--marketing-accent)' }
                 const gameWinRate = stat.gamesPlayed > 0 ? Math.round((stat.gamesWon / stat.gamesPlayed) * 100) : 0
+                const isMultiplayerOnly = MULTIPLAYER_ONLY_GAMES.has(stat.gameId)
 
                 return (
                   <motion.div
@@ -380,9 +525,16 @@ export default function StatsClient({ gameStats, recentResults }: StatsClientPro
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <GameIcon gameId={stat.gameId} size={32} animated />
-                        <p className="text-lg font-semibold text-[var(--text-primary)]">
-                          {game.label}
-                        </p>
+                        <div>
+                          <p className="text-lg font-semibold text-[var(--text-primary)]">
+                            {game.label}
+                          </p>
+                          {mode === 'solo' && isMultiplayerOnly && (
+                            <p className="mt-0.5 text-[11px] text-[var(--text-tertiary)]">
+                              Multiplayer only
+                            </p>
+                          )}
+                        </div>
                       </div>
                       <span className="rounded-full bg-[var(--surface)] px-3 py-1 text-xs font-medium text-[var(--text-secondary)]">
                         {stat.gamesPlayed} played
@@ -428,7 +580,7 @@ export default function StatsClient({ gameStats, recentResults }: StatsClientPro
               })
             ) : (
               <div className="rounded-[22px] border border-dashed border-[var(--border)] px-4 py-6 text-sm text-[var(--text-secondary)] md:col-span-2">
-                No game stats yet. Finish a round and this view will start filling in automatically.
+                {modeCopy[mode].emptyHint}
               </div>
             )}
           </div>
@@ -477,8 +629,8 @@ export default function StatsClient({ gameStats, recentResults }: StatsClientPro
               Recent matches
             </p>
             <div className="mt-4 space-y-3">
-              {recentResults.length > 0 ? (
-                recentResults.map((result, i) => (
+              {filteredRecentResults.length > 0 ? (
+                filteredRecentResults.map((result, i) => (
                   <motion.div
                     key={result.id}
                     className="rounded-[18px] border border-[var(--border)] bg-[var(--background)]/55 transition-colors hover:bg-[var(--surface-hover)]"
@@ -497,6 +649,12 @@ export default function StatsClient({ gameStats, recentResults }: StatsClientPro
                           <p className="text-sm font-semibold text-[var(--text-primary)]">
                             {GAME_META[result.gameId]?.label ?? result.gameId}
                           </p>
+                          <span
+                            className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-tertiary)]"
+                            style={{ background: 'var(--surface-hover)' }}
+                          >
+                            {result.isSolo ? 'Solo' : 'Multi'}
+                          </span>
                         </div>
                         <p className="text-xs text-[var(--text-tertiary)]">
                           {formatRelative(result.createdAt)}
@@ -509,10 +667,10 @@ export default function StatsClient({ gameStats, recentResults }: StatsClientPro
                           </p>
                           {result.isWinner && (
                             <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--success-500)' }}>
-                              Winner
+                              {result.isSolo ? 'Solved' : 'Winner'}
                             </span>
                           )}
-                          {result.rank != null && (
+                          {!result.isSolo && result.rank != null && (
                             <span className="rounded-full bg-[var(--surface)] px-2.5 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
                               #{result.rank}
                             </span>
@@ -536,7 +694,11 @@ export default function StatsClient({ gameStats, recentResults }: StatsClientPro
                 ))
               ) : (
                 <div className="rounded-[18px] border border-dashed border-[var(--border)] px-4 py-6 text-sm text-[var(--text-secondary)]">
-                  Nothing here yet. Create a room and start the first match.
+                  {mode === 'solo'
+                    ? 'No recent solo games yet.'
+                    : mode === 'multi'
+                      ? 'No recent multiplayer games yet.'
+                      : 'Nothing here yet. Create a room and start the first match.'}
                 </div>
               )}
             </div>

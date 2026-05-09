@@ -18,6 +18,7 @@ export type TriviaQuestionFilters = {
   status: string
   category: string
   difficulty: string
+  region: string
   search: string
 }
 
@@ -26,6 +27,7 @@ export function normalizeTriviaQuestionFilters(input: {
   status?: string
   category?: string
   difficulty?: string
+  region?: string
   search?: string
 }): TriviaQuestionFilters {
   const parsedPage = Number(input.page ?? '1')
@@ -35,27 +37,77 @@ export function normalizeTriviaQuestionFilters(input: {
     status: input.status?.trim() ?? '',
     category: input.category?.trim() ?? '',
     difficulty: input.difficulty?.trim() ?? '',
+    region: input.region?.trim() ?? '',
     search: input.search?.trim() ?? '',
   }
 }
 
-export async function getAdminGamesPageData(filters: TriviaQuestionFilters) {
+/* ══════════════════════════════════════════════════════════════════════════
+   Game configuration page (/admin/games)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+export async function getAdminGamesPageData() {
+  const [gameConfigs, totalQuestions, reportedQuestions, restrictedQuestions] = await Promise.all([
+    prisma.gameConfig.findMany({
+      orderBy: { gameId: 'asc' },
+    }),
+    prisma.triviaQuestion.count(),
+    prisma.triviaQuestion.count({
+      where: {
+        reportCount: { gt: 0 },
+      },
+    }),
+    prisma.triviaQuestion.count({
+      where: {
+        status: { in: ['hidden', 'rejected', 'escalated'] },
+      },
+    }),
+  ])
+
+  return {
+    gameConfigs: gameConfigs.map((game) => ({
+      id: game.id,
+      gameId: game.gameId,
+      name: game.name,
+      description: game.description,
+      isEnabled: game.isEnabled,
+      minPlayers: game.minPlayers,
+      maxPlayers: game.maxPlayers,
+      defaultRounds: game.defaultRounds,
+      roundTime: game.roundTime,
+      settings: (game.settings as Record<string, unknown> | null) ?? null,
+      updatedAt: game.updatedAt.toISOString(),
+    })),
+    summary: {
+      totalGames: gameConfigs.length,
+      enabledGames: gameConfigs.filter((game) => game.isEnabled).length,
+      totalQuestions,
+      reportedQuestions,
+      restrictedQuestions,
+    },
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Trivia question browser (/admin/games/trivia)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+export async function getAdminTriviaQuestionsPageData(filters: TriviaQuestionFilters) {
   const where = buildTriviaQuestionWhere(filters)
   const skip = (filters.page - 1) * TRIVIA_BROWSER_PAGE_SIZE
 
   const [
-    gameConfigs,
     totalTriviaCount,
     triviaQuestions,
     distinctCategories,
     distinctDifficulties,
+    distinctRegions,
     totalQuestions,
     reportedQuestions,
     restrictedQuestions,
+    indiaQuestions,
+    internationalQuestions,
   ] = await Promise.all([
-    prisma.gameConfig.findMany({
-      orderBy: { gameId: 'asc' },
-    }),
     prisma.triviaQuestion.count({ where }),
     prisma.triviaQuestion.findMany({
       where,
@@ -77,21 +129,24 @@ export async function getAdminGamesPageData(filters: TriviaQuestionFilters) {
       select: { difficulty: true },
       orderBy: { difficulty: 'asc' },
     }),
+    prisma.triviaQuestion.findMany({
+      distinct: ['region'],
+      select: { region: true },
+      orderBy: { region: 'asc' },
+    }),
     prisma.triviaQuestion.count(),
     prisma.triviaQuestion.count({
       where: {
-        reportCount: {
-          gt: 0,
-        },
+        reportCount: { gt: 0 },
       },
     }),
     prisma.triviaQuestion.count({
       where: {
-        status: {
-          in: ['hidden', 'rejected', 'escalated'],
-        },
+        status: { in: ['hidden', 'rejected', 'escalated'] },
       },
     }),
+    prisma.triviaQuestion.count({ where: { region: 'india' } }),
+    prisma.triviaQuestion.count({ where: { region: 'international' } }),
   ])
 
   const questionIds = triviaQuestions.map((question) => question.id)
@@ -159,25 +214,13 @@ export async function getAdminGamesPageData(filters: TriviaQuestionFilters) {
   )
 
   return {
-    gameConfigs: gameConfigs.map((game) => ({
-      id: game.id,
-      gameId: game.gameId,
-      name: game.name,
-      description: game.description,
-      isEnabled: game.isEnabled,
-      minPlayers: game.minPlayers,
-      maxPlayers: game.maxPlayers,
-      defaultRounds: game.defaultRounds,
-      roundTime: game.roundTime,
-      settings: (game.settings as Record<string, unknown> | null) ?? null,
-      updatedAt: game.updatedAt.toISOString(),
-    })),
     triviaQuestions: triviaQuestions.map((question) => ({
       id: question.id,
       question: question.question,
       status: question.status,
       category: question.category,
       difficulty: question.difficulty,
+      region: question.region,
       reportCount: question.reportCount,
       usageCount: question.usageCount,
       correctCount: question.correctCount,
@@ -198,12 +241,13 @@ export async function getAdminGamesPageData(filters: TriviaQuestionFilters) {
     availableStatuses: Array.from(TRIVIA_LIFECYCLE_STATUSES),
     availableCategories: distinctCategories.map((entry) => entry.category),
     availableDifficulties: distinctDifficulties.map((entry) => entry.difficulty),
+    availableRegions: distinctRegions.map((entry) => entry.region),
     summary: {
-      totalGames: gameConfigs.length,
-      enabledGames: gameConfigs.filter((game) => game.isEnabled).length,
       totalQuestions,
       reportedQuestions,
       restrictedQuestions,
+      indiaQuestions,
+      internationalQuestions,
     },
   }
 }
@@ -221,6 +265,10 @@ function buildTriviaQuestionWhere(filters: TriviaQuestionFilters) {
 
   if (filters.difficulty) {
     andClauses.push({ difficulty: filters.difficulty })
+  }
+
+  if (filters.region) {
+    andClauses.push({ region: filters.region })
   }
 
   if (filters.search) {

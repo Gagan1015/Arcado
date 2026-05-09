@@ -26,6 +26,7 @@ type SeedTriviaQuestion = {
   tags: string[]
   source: 'seed'
   status: 'approved'
+  region: 'international'
 }
 
 const ANSWER_IDS = ['a', 'b', 'c', 'd'] as const
@@ -74,6 +75,7 @@ function createQuestion(options: {
   const answers = createAnswers(options.correctAnswer, options.distractors, options.correctIndex)
   const correctId = ANSWER_IDS[options.correctIndex] ?? 'a'
   const normalizedHash = JSON.stringify({
+    region: 'international',
     category: options.category,
     difficulty: options.difficulty,
     question: options.question.trim().toLowerCase(),
@@ -92,6 +94,7 @@ function createQuestion(options: {
     tags: sanitizeTags(options.tags),
     source: 'seed',
     status: 'approved',
+    region: 'international',
   }
 }
 

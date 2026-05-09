@@ -35,6 +35,8 @@ export const triviaCategoryListSchema = z
     message: 'Trivia categories must be unique',
   })
 export const triviaDifficultySchema = z.enum(['easy', 'medium', 'hard'])
+export const triviaRegionSchema = z.enum(['auto', 'international', 'india'])
+export const triviaResolvedRegionSchema = z.enum(['international', 'india'])
 export const triviaAnswerIdSchema = z.enum(['a', 'b', 'c', 'd'])
 
 // Shared entities
@@ -62,6 +64,13 @@ export const gameSettingsSchema = z
     triviaCategories: triviaCategoryListSchema.optional(),
     triviaDifficulty: triviaDifficultySchema.optional(),
     triviaTimeLimit: z.number().int().min(5).max(60).optional(),
+    // Region preference for the room: 'auto' resolves via the creator's
+    // inferred country, 'india' forces the Indian pool, 'international'
+    // forces the default global pool.
+    triviaRegion: triviaRegionSchema.optional(),
+    // The region actually used at game time (persisted after auto-resolution
+    // so reconnecting players and analytics see the same bucket).
+    triviaResolvedRegion: triviaResolvedRegionSchema.optional(),
   })
   .optional()
 

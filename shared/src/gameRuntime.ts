@@ -17,6 +17,10 @@ export interface GameSettings {
   triviaCategories?: TriviaCategory[]
   triviaDifficulty?: TriviaDifficulty
   triviaTimeLimit?: number
+  /** 'auto' | 'international' | 'india'. Host-selected preference. */
+  triviaRegion?: 'auto' | 'international' | 'india'
+  /** 'international' | 'india'. Resolved before the first question fetch. */
+  triviaResolvedRegion?: 'international' | 'india'
   customSettings?: Record<string, unknown>
 }
 
@@ -158,6 +162,7 @@ export interface GameResultData {
   score: number
   rank: number
   isWinner: boolean
+  isSolo: boolean
   metadata?: PersistedGameResultMetadata
 }
 

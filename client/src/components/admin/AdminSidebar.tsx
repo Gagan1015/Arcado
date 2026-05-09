@@ -7,6 +7,7 @@ import { useState, createContext, useContext } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   BarChart3,
+  BookOpen,
   Gamepad2,
   TrendingUp,
   Users,
@@ -35,6 +36,7 @@ const mainNavItems = [
   { href: '/admin', label: 'Dashboard', icon: BarChart3 },
   { href: '/admin/analytics', label: 'Analytics', icon: TrendingUp },
   { href: '/admin/games', label: 'Games', icon: Gamepad2 },
+  { href: '/admin/games/trivia', label: 'Trivia Questions', icon: BookOpen },
   { href: '/admin/users', label: 'Users', icon: Users },
   { href: '/admin/rooms', label: 'Rooms', icon: DoorOpen },
   { href: '/admin/moderation', label: 'Moderation', icon: ShieldAlert },
@@ -62,7 +64,16 @@ export function AdminSidebar({ userName, userEmail: _userEmail, userImage, userR
 
   const isActive = (href: string) => {
     if (href === '/admin') return pathname === '/admin'
-    return pathname.startsWith(href)
+
+    // If another entry in the nav is a more specific match for this pathname,
+    // defer to it so parent/child routes (e.g. /admin/games vs
+    // /admin/games/trivia) don't both highlight at the same time.
+    const moreSpecific = [...mainNavItems, ...bottomNavItems].some(
+      (item) => item.href !== href && item.href.startsWith(`${href}/`) && pathname.startsWith(item.href),
+    )
+    if (moreSpecific) return false
+
+    return pathname === href || pathname.startsWith(`${href}/`)
   }
 
   const sidebarWidth = collapsed ? 72 : 260

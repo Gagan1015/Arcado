@@ -63,6 +63,7 @@ export class TriviaRuntime extends BaseGameRuntime {
   private revealTimer: ReturnType<typeof setTimeout> | null = null
   private readonly categories: TriviaCategory[]
   private readonly difficulty: TriviaDifficulty
+  private readonly region: 'international' | 'india'
   private readonly roundTimeSeconds: number
   private readonly roundHistory: TriviaRoundSummary[] = []
 
@@ -78,6 +79,9 @@ export class TriviaRuntime extends BaseGameRuntime {
           : ['Mixed']
     )
     this.difficulty = config.settings?.triviaDifficulty ?? 'medium'
+    // Region was already resolved by GameManager (either from host preference
+    // or inferred from the creator's country) and passed through settings.
+    this.region = config.settings?.triviaResolvedRegion ?? 'international'
     this.questionService = new QuestionService()
   }
 
@@ -300,6 +304,7 @@ export class TriviaRuntime extends BaseGameRuntime {
     this.currentQuestion = await this.questionService.getQuestion({
       category: pickTriviaCategory(this.categories),
       difficulty: this.difficulty,
+      region: this.region,
     })
     const currentQuestion = this.currentQuestion
     this.roundStartedAt = new Date()
@@ -427,8 +432,21 @@ export class TriviaRuntime extends BaseGameRuntime {
     }
   }
 
-  private isSoloMode() {
-    return this.players.size <= 1
+  protected override determineSoloWinner(playerId: UserId): boolean {
+    // Solo Trivia: a "win" means the player got at least half the round
+    // questions correct. Zero correct answers (all wrong/skipped) is a
+    // loss even though there is no opponent to lose against.
+    if (this.totalRounds <= 0) {
+      return false
+    }
+
+    const correctAnswers = this.correctAnswers.get(playerId) ?? 0
+    if (correctAnswers <= 0) {
+      return false
+    }
+
+    const threshold = Math.ceil(this.totalRounds / 2)
+    return correctAnswers >= threshold
   }
 
   private clearTimers() {

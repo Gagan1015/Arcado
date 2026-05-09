@@ -17,6 +17,7 @@ export type TriviaQuestionData = TriviaQuestion & {
 export type TriviaQuestionRequest = {
   category?: TriviaCategory
   difficulty?: TriviaDifficulty
+  region?: 'international' | 'india'
 }
 
 type StoredTriviaQuestion = {
@@ -36,6 +37,7 @@ export interface TriviaQuestionRepository {
   findReusableQuestion(options: {
     category: TriviaCategory
     difficulty: TriviaDifficulty
+    region: 'international' | 'india'
     excludeHashes: string[]
   }): Promise<StoredTriviaQuestion | null>
   markQuestionUsed(id: string): Promise<void>
@@ -43,6 +45,7 @@ export interface TriviaQuestionRepository {
 
 const DEFAULT_CATEGORY: TriviaCategory = 'Mixed'
 const DEFAULT_DIFFICULTY: TriviaDifficulty = 'medium'
+const DEFAULT_REGION: 'international' | 'india' = 'international'
 const APPROVED_STATUS = 'approved'
 
 const storedTriviaQuestionSchema = triviaQuestionSchema.extend({
@@ -54,6 +57,7 @@ export class PrismaTriviaQuestionRepository implements TriviaQuestionRepository 
   async findReusableQuestion(options: {
     category: TriviaCategory
     difficulty: TriviaDifficulty
+    region: 'international' | 'india'
     excludeHashes: string[]
   }) {
     const categoryFilter =
@@ -64,6 +68,7 @@ export class PrismaTriviaQuestionRepository implements TriviaQuestionRepository 
     const question = await prisma.triviaQuestion.findFirst({
       where: {
         status: APPROVED_STATUS,
+        region: options.region,
         difficulty: options.difficulty,
         category: categoryFilter,
         hash: { notIn: options.excludeHashes },
@@ -99,9 +104,15 @@ export class QuestionService {
   async getQuestion(options: TriviaQuestionRequest = {}): Promise<TriviaQuestionData> {
     const category = options.category ?? DEFAULT_CATEGORY
     const difficulty = options.difficulty ?? DEFAULT_DIFFICULTY
+    const region = options.region ?? DEFAULT_REGION
     const excludeHashes = Array.from(this.usedQuestionHashes)
 
-    const databaseQuestion = await this.getDatabaseQuestion({ category, difficulty, excludeHashes })
+    const databaseQuestion = await this.getDatabaseQuestion({
+      category,
+      difficulty,
+      region,
+      excludeHashes,
+    })
     if (databaseQuestion) {
       return databaseQuestion
     }
@@ -111,10 +122,26 @@ export class QuestionService {
       const recycledQuestion = await this.getDatabaseQuestion({
         category,
         difficulty,
+        region,
         excludeHashes: [],
       })
       if (recycledQuestion) {
         return recycledQuestion
+      }
+    }
+
+    // Last-resort fallback: if the Indian pool is empty for some
+    // category/difficulty combination, try the international pool so the
+    // game keeps running instead of throwing mid-round.
+    if (region !== DEFAULT_REGION) {
+      const internationalFallback = await this.getDatabaseQuestion({
+        category,
+        difficulty,
+        region: DEFAULT_REGION,
+        excludeHashes: Array.from(this.usedQuestionHashes),
+      })
+      if (internationalFallback) {
+        return internationalFallback
       }
     }
 
@@ -126,6 +153,7 @@ export class QuestionService {
   private async getDatabaseQuestion(options: {
     category: TriviaCategory
     difficulty: TriviaDifficulty
+    region: 'international' | 'india'
     excludeHashes: string[]
   }) {
     try {

@@ -105,6 +105,7 @@ export default async function AdminUserDetailPage({
         score: r.score,
         rank: r.rank,
         isWinner: r.isWinner,
+        isSolo: r.isSolo,
         duration: r.duration,
         roomCode: r.room.code,
         createdAt: r.createdAt.toISOString(),

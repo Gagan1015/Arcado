@@ -7,11 +7,15 @@ import {
   ArrowLeft,
   AlertTriangle,
   Calendar,
+  CheckCircle2,
   Clock,
   DoorOpen,
   Gamepad2,
   Lock,
+  Target,
+  Timer,
   Trophy,
+  Type,
   User,
   Users,
 } from 'lucide-react'
@@ -20,6 +24,7 @@ import { GameIcon } from '@/components/ui/GameIcons'
 import { useToast } from '@/components/ui/Toast'
 import { staggerContainer, staggerItem } from '@/lib/motion'
 import type { AdminRoomDetail } from '@/lib/adminRooms'
+import { AdminTable, AdminTableChip } from './AdminTable'
 
 const GAME_LABELS: Record<string, string> = {
   skribble: 'Skribble',
@@ -564,68 +569,84 @@ export function AdminRoomDetailClient({
             </div>
 
             {results.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-[var(--border)]">
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                        Player
-                      </th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                        Score
-                      </th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                        Rank
-                      </th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                        Winner
-                      </th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                        Duration
-                      </th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                        Recorded
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {results.map((result) => (
-                      <tr
-                        key={result.id}
-                        className="border-b border-[var(--border-subtle)] transition-colors hover:bg-[var(--surface-hover)]"
-                      >
-                        <td className="px-5 py-3">
-                          <div>
-                            <p className="font-medium text-[var(--text-primary)]">{result.playerName}</p>
-                            <p className="text-xs text-[var(--text-tertiary)]">
-                              {result.playerEmail || result.userId}
-                            </p>
-                          </div>
-                        </td>
-                        <td className="px-5 py-3 font-semibold text-[var(--text-primary)]">
-                          {result.score}
-                        </td>
-                        <td className="px-5 py-3 text-[var(--text-secondary)]">
-                          {result.rank ? `#${result.rank}` : '—'}
-                        </td>
-                        <td className="px-5 py-3">
-                          {result.isWinner ? (
-                            <span className="badge badge-success">Winner</span>
-                          ) : (
-                            <span className="text-xs text-[var(--text-tertiary)]">—</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3 text-[var(--text-secondary)]">
-                          {formatDuration(result.duration)}
-                        </td>
-                        <td className="px-5 py-3 text-xs text-[var(--text-tertiary)]">
-                          {formatRelative(result.createdAt)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <AdminTable<(typeof results)[number]>
+                rows={results}
+                rowKey={(result) => result.id}
+                columns={[
+                  {
+                    key: 'player',
+                    label: 'Player',
+                    icon: User,
+                    width: 'minmax(14rem, 1.6fr)',
+                    render: (result) => (
+                      <div>
+                        <p className="font-medium text-[var(--text-primary)]">{result.playerName}</p>
+                        <p className="text-xs text-[var(--text-tertiary)]">
+                          {result.playerEmail || result.userId}
+                        </p>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'score',
+                    label: 'Score',
+                    icon: Trophy,
+                    width: '7rem',
+                    align: 'center',
+                    render: (result) => (
+                      <span className="font-semibold text-[var(--text-primary)]">
+                        {result.score}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'rank',
+                    label: 'Rank',
+                    icon: Target,
+                    width: '6rem',
+                    align: 'center',
+                    render: (result) => (
+                      <span className="text-[var(--text-secondary)]">
+                        {result.rank ? `#${result.rank}` : '—'}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'winner',
+                    label: 'Winner',
+                    icon: CheckCircle2,
+                    width: '7rem',
+                    render: (result) =>
+                      result.isWinner ? (
+                        <AdminTableChip color="var(--success-500)">Winner</AdminTableChip>
+                      ) : (
+                        <span className="text-xs text-[var(--text-tertiary)]">—</span>
+                      ),
+                  },
+                  {
+                    key: 'duration',
+                    label: 'Duration',
+                    icon: Timer,
+                    width: '8rem',
+                    render: (result) => (
+                      <span className="text-[var(--text-secondary)]">
+                        {formatDuration(result.duration)}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'recorded',
+                    label: 'Recorded',
+                    icon: Calendar,
+                    width: 'minmax(7rem, 9rem)',
+                    render: (result) => (
+                      <span className="text-xs text-[var(--text-tertiary)]">
+                        {formatRelative(result.createdAt)}
+                      </span>
+                    ),
+                  },
+                ]}
+              />
             ) : (
               <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">
                 No stored game results yet.

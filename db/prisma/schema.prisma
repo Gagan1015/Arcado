@@ -139,12 +139,29 @@ model GameStat {
   id          String   @id @default(cuid())
   userId      String
   gameId      String
+  // Legacy aggregate totals (solo + multi combined). Kept in sync for
+  // backward compatibility with any older consumers.
   gamesPlayed Int      @default(0)
   gamesWon    Int      @default(0)
   totalScore  Int      @default(0)
   highScore   Int      @default(0)
   totalTime   Int      @default(0)
-  updatedAt   DateTime @updatedAt
+
+  // Solo-mode bucket (rooms with a single player).
+  gamesPlayedSolo Int @default(0)
+  gamesWonSolo    Int @default(0)
+  totalScoreSolo  Int @default(0)
+  highScoreSolo   Int @default(0)
+  totalTimeSolo   Int @default(0)
+
+  // Multiplayer bucket (rooms with 2+ players).
+  gamesPlayedMulti Int @default(0)
+  gamesWonMulti    Int @default(0)
+  totalScoreMulti  Int @default(0)
+  highScoreMulti   Int @default(0)
+  totalTimeMulti   Int @default(0)
+
+  updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -161,6 +178,9 @@ model GameResult {
   score     Int      @default(0)
   rank      Int?
   isWinner  Boolean  @default(false)
+  // Whether this result was produced in a solo (1 player) run. Used so the
+  // stats UI can split solo vs multiplayer win rates cleanly.
+  isSolo    Boolean  @default(false)
   duration  Int?
   metadata  Json?
   createdAt DateTime @default(now())
@@ -171,6 +191,7 @@ model GameResult {
   @@index([roomId])
   @@index([userId])
   @@index([gameId])
+  @@index([isSolo])
   @@index([createdAt])
 }
 
@@ -220,6 +241,12 @@ model TriviaQuestion {
   category     String
   difficulty   String
   tags         String[]
+  // Regional bucket. "international" = default English/global pool,
+  // "india" = India-focused pool. Runtime picks questions from one bucket
+  // based on the GameConfig.settings.triviaRegion preference (auto | india |
+  // international) and, when set to auto, the requesting user's inferred
+  // country from CDN headers.
+  region       String    @default("international")
   source       String    @default("ai")
   status       String    @default("approved")
   usageCount   Int       @default(0)
@@ -230,6 +257,7 @@ model TriviaQuestion {
   updatedAt    DateTime  @updatedAt
 
   @@index([category, difficulty, status])
+  @@index([region, category, difficulty, status])
   @@index([lastUsedAt])
   @@index([usageCount])
 }

@@ -43,6 +43,7 @@ export interface AdminRoomDetail {
     score: number
     rank: number | null
     isWinner: boolean
+    isSolo: boolean
     duration: number | null
     createdAt: string
   }>
@@ -174,6 +175,7 @@ export async function getAdminRoomDetail(roomId: string): Promise<AdminRoomDetai
       score: result.score,
       rank: result.rank,
       isWinner: result.isWinner,
+      isSolo: result.isSolo,
       duration: result.duration,
       createdAt: result.createdAt.toISOString(),
     })),

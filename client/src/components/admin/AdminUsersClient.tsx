@@ -4,9 +4,12 @@ import { motion } from 'motion/react'
 import Link from 'next/link'
 import { useCallback, useRef, useState } from 'react'
 import {
+  AtSign,
   Ban,
+  Calendar,
   CheckCircle2,
   ChevronDown,
+  Circle,
   Crown,
   Eye,
   MoreVertical,
@@ -15,6 +18,7 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
+  Type,
   Users,
   UserCog,
   X,
@@ -22,6 +26,7 @@ import {
 import { staggerContainer, staggerItem } from '@/lib/motion'
 import { canAssignRole, canManageRole } from '@/lib/adminRoles'
 import { UserAvatar } from '@/components/ui/UserAvatar'
+import { AdminTable, AdminTableChip } from './AdminTable'
 
 interface User {
   id: string
@@ -50,6 +55,13 @@ const ROLE_CONFIG: Record<string, { label: string; badge: string; icon: typeof S
   MODERATOR: { label: 'Moderator', badge: 'badge-warning', icon: ShieldCheck },
   ADMIN: { label: 'Admin', badge: 'badge-success', icon: ShieldAlert },
   SUPER_ADMIN: { label: 'Super Admin', badge: 'badge-error', icon: Crown },
+}
+
+const ROLE_COLOR: Record<string, string> = {
+  USER: 'var(--primary-500)',
+  MODERATOR: 'var(--warning-500)',
+  ADMIN: 'var(--success-500)',
+  SUPER_ADMIN: 'var(--error-500)',
 }
 
 const STATUS_CONFIG: Record<string, { label: string; badge: string; dot: string }> = {
@@ -293,129 +305,129 @@ export function AdminUsersClient({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="card !p-0"
       >
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-[var(--border)]">
-                <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                  User
-                </th>
-                <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                  Role
-                </th>
-                <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                  Status
-                </th>
-                <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                  Joined
-                </th>
-                <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length > 0 ? (
-                filtered.map((user) => {
-                  const roleInfo = ROLE_CONFIG[user.role] || ROLE_CONFIG.USER
-                  const statusInfo = STATUS_CONFIG[user.status] || STATUS_CONFIG.ACTIVE
-                  const RoleIcon = roleInfo.icon
-                  const access = getUserAccess(user)
-
-                  return (
-                    <tr
-                      key={user.id}
-                      className={`border-b border-[var(--border-subtle)] transition-colors hover:bg-[var(--surface-hover)] ${
-                        loading === user.id ? 'opacity-50' : ''
-                      }`}
-                    >
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <UserAvatar
-                            src={user.image}
-                            name={user.name}
-                            alt={user.name}
-                            className="h-9 w-9 rounded-full ring-2 ring-[var(--border)]"
-                            fallbackClassName="bg-[var(--primary-500)]/15 text-[var(--primary-400)]"
-                          />
-                          <div className="min-w-0">
-                            <p className="truncate font-medium text-[var(--text-primary)]">
-                              {user.name}
-                            </p>
-                            <p className="truncate text-xs text-[var(--text-tertiary)]">
-                              {user.email}
-                            </p>
-                            {!access.canManage && (
-                              <p className="mt-1 text-[11px] text-[var(--warning-500)]">
-                                {access.isSelf
-                                  ? 'Protected: your own account'
-                                  : 'Protected: equal or higher role'}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <span className={`badge ${roleInfo.badge} inline-flex items-center gap-1.5`}>
-                          <RoleIcon className="h-3 w-3" />
-                          {roleInfo.label}
-                        </span>
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <span className="inline-flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                          <span className={`h-2 w-2 rounded-full ${statusInfo.dot}`} />
-                          {statusInfo.label}
-                        </span>
-                      </td>
-
-                      <td className="px-5 py-4 text-[var(--text-tertiary)]">
-                        {formatDate(user.createdAt)}
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-1">
-                          <Link
-                            href={`/admin/users/${user.id}`}
-                            className="btn btn-ghost btn-sm !p-1.5"
-                            title="View user details"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Link>
-                          <button
-                            ref={(element) => {
-                              dropdownBtnRefs.current[user.id] = element
-                            }}
-                            onClick={() => openDropdown(user.id)}
-                            className="btn btn-ghost btn-sm !p-1.5"
-                            aria-label={`Open actions for ${user.name}`}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })
-              ) : (
-                <tr>
-                  <td colSpan={5} className="px-5 py-12 text-center">
-                    <Users className="mx-auto mb-3 h-10 w-10 text-[var(--text-tertiary)]" />
-                    <p className="text-sm font-medium text-[var(--text-secondary)]">
-                      No users found
-                    </p>
-                    <p className="mt-1 text-xs text-[var(--text-tertiary)]">
-                      Try adjusting your search or filters.
-                    </p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <AdminTable<User>
+          rows={filtered}
+          rowKey={(user) => user.id}
+          rowClassName={(user) => (loading === user.id ? 'opacity-50' : undefined)}
+          empty={{
+            icon: Users,
+            title: 'No users found',
+            description: 'Try adjusting your search or filters.',
+          }}
+          footer={
+            <div className="flex items-center justify-between">
+              <span>
+                Showing {filtered.length} of {users.length} users
+              </span>
+            </div>
+          }
+          columns={[
+            {
+              key: 'user',
+              label: 'User',
+              icon: Type,
+              width: 'minmax(18rem, 2fr)',
+              render: (user) => {
+                const access = getUserAccess(user)
+                return (
+                  <div className="flex items-center gap-3">
+                    <UserAvatar
+                      src={user.image}
+                      name={user.name}
+                      alt={user.name}
+                      className="h-8 w-8 rounded-md ring-1 ring-[var(--border)]"
+                      fallbackClassName="bg-[var(--primary-500)]/15 text-[var(--primary-400)]"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-[var(--text-primary)]">{user.name}</p>
+                      <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-[var(--text-tertiary)]">
+                        <AtSign className="h-3 w-3" />
+                        <span className="truncate">{user.email}</span>
+                      </p>
+                      {!access.canManage && (
+                        <p className="mt-1 text-[11px] text-[var(--warning-500)]">
+                          {access.isSelf
+                            ? 'Protected: your own account'
+                            : 'Protected: equal or higher role'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )
+              },
+            },
+            {
+              key: 'role',
+              label: 'Role',
+              icon: Shield,
+              width: 'minmax(9rem, 12rem)',
+              render: (user) => {
+                const roleInfo = ROLE_CONFIG[user.role] || ROLE_CONFIG.USER
+                const RoleIcon = roleInfo.icon
+                const color = ROLE_COLOR[user.role] ?? 'var(--primary-500)'
+                return (
+                  <AdminTableChip color={color}>
+                    <RoleIcon className="h-3 w-3" />
+                    {roleInfo.label}
+                  </AdminTableChip>
+                )
+              },
+            },
+            {
+              key: 'status',
+              label: 'Status',
+              icon: Circle,
+              width: 'minmax(8rem, 10rem)',
+              render: (user) => {
+                const statusInfo = STATUS_CONFIG[user.status] || STATUS_CONFIG.ACTIVE
+                return (
+                  <span className="inline-flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                    <span className={`h-2 w-2 rounded-full ${statusInfo.dot}`} />
+                    {statusInfo.label}
+                  </span>
+                )
+              },
+            },
+            {
+              key: 'joined',
+              label: 'Joined',
+              icon: Calendar,
+              width: 'minmax(9rem, 11rem)',
+              render: (user) => (
+                <span className="text-[var(--text-tertiary)]">{formatDate(user.createdAt)}</span>
+              ),
+            },
+            {
+              key: 'actions',
+              label: 'Actions',
+              icon: MoreVertical,
+              width: '9rem',
+              align: 'right',
+              render: (user) => (
+                <div className="flex items-center justify-end gap-1">
+                  <Link
+                    href={`/admin/users/${user.id}`}
+                    className="btn btn-ghost btn-sm !p-1.5"
+                    title="View user details"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Link>
+                  <button
+                    ref={(element) => {
+                      dropdownBtnRefs.current[user.id] = element
+                    }}
+                    onClick={() => openDropdown(user.id)}
+                    className="btn btn-ghost btn-sm !p-1.5"
+                    aria-label={`Open actions for ${user.name}`}
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </button>
+                </div>
+              ),
+            },
+          ]}
+        />
 
         {activeDropdown &&
           dropdownPos &&

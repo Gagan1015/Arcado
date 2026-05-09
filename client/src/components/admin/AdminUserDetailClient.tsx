@@ -23,10 +23,15 @@ import {
   Target,
   Timer,
   Trophy,
+  Type,
+  Layers,
+  User as UserIcon2,
+  Users as UsersIcon2,
 } from 'lucide-react'
 import { staggerContainer, staggerItem } from '@/lib/motion'
 import { canAssignRole, canManageRole } from '@/lib/adminRoles'
 import { UserAvatar } from '@/components/ui/UserAvatar'
+import { AdminTable, AdminTableChip } from './AdminTable'
 
 interface UserData {
   id: string
@@ -64,6 +69,7 @@ interface RecentResult {
   score: number
   rank: number | null
   isWinner: boolean
+  isSolo: boolean
   duration: number | null
   roomCode: string
   createdAt: string
@@ -635,73 +641,112 @@ export function AdminUserDetailClient({
             </div>
 
             {recentResults.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-[var(--border)]">
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                        Game
-                      </th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                        Room
-                      </th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                        Score
-                      </th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                        Rank
-                      </th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                        Result
-                      </th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                        Date
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentResults.map((result) => (
-                      <tr
-                        key={result.id}
-                        className="border-b border-[var(--border-subtle)] transition-colors hover:bg-[var(--surface-hover)]"
+              <AdminTable<RecentResult>
+                rows={recentResults}
+                rowKey={(result) => result.id}
+                columns={[
+                  {
+                    key: 'game',
+                    label: 'Game',
+                    icon: Type,
+                    width: 'minmax(10rem, 1.2fr)',
+                    render: (result) => (
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{
+                            backgroundColor: GAME_COLORS[result.gameId] ?? 'var(--primary-500)',
+                          }}
+                        />
+                        <span className="font-medium text-[var(--text-primary)]">
+                          {GAME_LABELS[result.gameId] ?? result.gameId}
+                        </span>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'room',
+                    label: 'Room',
+                    icon: Hash,
+                    width: 'minmax(6rem, 8rem)',
+                    render: (result) => (
+                      <span className="font-mono text-xs text-[var(--text-secondary)]">
+                        {result.roomCode}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'mode',
+                    label: 'Mode',
+                    icon: Layers,
+                    width: 'minmax(7rem, 8rem)',
+                    render: (result) => (
+                      <AdminTableChip
+                        color={result.isSolo ? 'var(--primary-500)' : 'var(--success-500)'}
                       >
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className="h-2.5 w-2.5 rounded-full"
-                              style={{
-                                backgroundColor: GAME_COLORS[result.gameId] ?? 'var(--primary-500)',
-                              }}
-                            />
-                            <span className="font-medium text-[var(--text-primary)]">
-                              {GAME_LABELS[result.gameId] ?? result.gameId}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-5 py-3 font-mono text-xs text-[var(--text-secondary)]">
-                          {result.roomCode}
-                        </td>
-                        <td className="px-5 py-3 font-semibold text-[var(--text-primary)]">
-                          {result.score}
-                        </td>
-                        <td className="px-5 py-3 text-[var(--text-secondary)]">
-                          {result.rank ? `#${result.rank}` : '-'}
-                        </td>
-                        <td className="px-5 py-3">
-                          {result.isWinner ? (
-                            <span className="badge badge-success">Winner</span>
-                          ) : (
-                            <span className="text-xs text-[var(--text-tertiary)]">-</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3 text-xs text-[var(--text-tertiary)]">
-                          {formatRelative(result.createdAt)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                        {result.isSolo ? (
+                          <>
+                            <UserIcon2 className="h-3 w-3" /> Solo
+                          </>
+                        ) : (
+                          <>
+                            <UsersIcon2 className="h-3 w-3" /> Multi
+                          </>
+                        )}
+                      </AdminTableChip>
+                    ),
+                  },
+                  {
+                    key: 'score',
+                    label: 'Score',
+                    icon: Trophy,
+                    width: '6rem',
+                    align: 'center',
+                    render: (result) => (
+                      <span className="font-semibold text-[var(--text-primary)]">
+                        {result.score}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'rank',
+                    label: 'Rank',
+                    icon: Target,
+                    width: '6rem',
+                    align: 'center',
+                    render: (result) => (
+                      <span className="text-[var(--text-secondary)]">
+                        {result.isSolo ? '—' : result.rank ? `#${result.rank}` : '—'}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'result',
+                    label: 'Result',
+                    icon: CheckCircle2,
+                    width: '8rem',
+                    render: (result) =>
+                      result.isWinner ? (
+                        <AdminTableChip color="var(--success-500)">
+                          {result.isSolo ? 'Solved' : 'Winner'}
+                        </AdminTableChip>
+                      ) : (
+                        <span className="text-xs text-[var(--text-tertiary)]">-</span>
+                      ),
+                  },
+                  {
+                    key: 'date',
+                    label: 'Date',
+                    icon: Calendar,
+                    width: 'minmax(7rem, 9rem)',
+                    render: (result) => (
+                      <span className="text-xs text-[var(--text-tertiary)]">
+                        {formatRelative(result.createdAt)}
+                      </span>
+                    ),
+                  },
+                ]}
+              />
             ) : (
               <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">
                 No game results recorded.

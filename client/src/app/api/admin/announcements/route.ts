@@ -12,7 +12,6 @@ export async function GET() {
 
   const announcements = await prisma.announcement.findMany({
     orderBy: { createdAt: 'desc' },
-    take: 50,
   })
 
   return NextResponse.json(announcements)

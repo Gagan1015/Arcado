@@ -12,7 +12,6 @@ export async function GET() {
 
   const rooms = await prisma.room.findMany({
     orderBy: { createdAt: 'desc' },
-    take: 50,
     include: {
       creator: {
         select: { id: true, name: true, email: true },

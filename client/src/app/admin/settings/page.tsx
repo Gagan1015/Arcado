@@ -2,9 +2,9 @@ import { prisma } from '@arcado/db'
 import { AdminSettingsClient } from '@/components/admin/AdminSettingsClient'
 
 export default async function AdminSettingsPage() {
+  // Show all announcements — older ones matter for auditing.
   const announcements = await prisma.announcement.findMany({
     orderBy: { createdAt: 'desc' },
-    take: 50,
   })
 
   return (

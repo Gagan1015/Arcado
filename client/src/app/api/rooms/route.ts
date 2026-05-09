@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
-import { gameIdSchema, triviaCategoryListSchema, triviaCategorySchema, triviaDifficultySchema } from '@arcado/shared'
+import { gameIdSchema, triviaCategoryListSchema, triviaCategorySchema, triviaDifficultySchema, triviaRegionSchema } from '@arcado/shared'
 
 import { requireSession } from '@/lib/admin'
 import { createRoomForUser, isGameUnavailableError } from '@/lib/rooms'
@@ -16,6 +16,7 @@ const createRoomSchema = z.object({
       triviaCategories: triviaCategoryListSchema.optional(),
       triviaDifficulty: triviaDifficultySchema.optional(),
       triviaTimeLimit: z.number().int().min(5).max(120).optional(),
+      triviaRegion: triviaRegionSchema.optional(),
     })
     .optional(),
 })
@@ -26,11 +27,20 @@ export async function POST(request: Request) {
     const json = await request.json()
     const input = createRoomSchema.parse(json)
 
+    // Read CDN-provided country hints so the Trivia runtime can pick the
+    // right regional pool without requiring the host to configure anything.
+    // Vercel uses `x-vercel-ip-country`, Cloudflare uses `cf-ipcountry`.
+    const creatorCountry =
+      request.headers.get('x-vercel-ip-country') ??
+      request.headers.get('cf-ipcountry') ??
+      undefined
+
     const result = await createRoomForUser({
       creatorId: session.user.id,
       gameId: input.gameId,
       maxPlayers: input.maxPlayers,
       settings: input.settings,
+      creatorCountry: creatorCountry ?? undefined,
     })
 
     return NextResponse.json({

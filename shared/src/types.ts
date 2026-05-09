@@ -62,6 +62,8 @@ import {
   triviaAnswerResultSchema,
   triviaCategorySchema,
   triviaDifficultySchema,
+  triviaRegionSchema,
+  triviaResolvedRegionSchema,
   triviaGameEndedSchema,
   triviaPlayerProgressSchema,
   triviaPlayerAnsweredSchema,
@@ -126,6 +128,8 @@ export type DrawWordChoosingStartedPayload = z.infer<typeof drawWordChoosingStar
 export type TriviaQuestion = z.infer<typeof triviaQuestionSchema>
 export type TriviaCategory = z.infer<typeof triviaCategorySchema>
 export type TriviaDifficulty = z.infer<typeof triviaDifficultySchema>
+export type TriviaRegion = z.infer<typeof triviaRegionSchema>
+export type TriviaResolvedRegion = z.infer<typeof triviaResolvedRegionSchema>
 export type TriviaSubmitAnswerPayload = z.infer<typeof triviaSubmitAnswerPayloadSchema>
 export type TriviaRoundStarted = z.infer<typeof triviaRoundStartedSchema>
 export type TriviaRoundEnded = z.infer<typeof triviaRoundEndedSchema>

@@ -214,6 +214,12 @@ export class WordelRuntime extends BaseGameRuntime {
     }
   }
 
+  protected override determineSoloWinner(playerId: UserId): boolean {
+    // In solo Wordel there's no opponent to beat, so the player wins by
+    // actually solving the secret word inside the attempt budget.
+    return this.playerState.get(playerId)?.solved ?? false
+  }
+
   protected override buildResultMetadata(playerId: UserId): GameResultData['metadata'] {
     const state = this.playerState.get(playerId)
 

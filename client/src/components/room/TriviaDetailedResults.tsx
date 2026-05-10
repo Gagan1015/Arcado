@@ -71,6 +71,9 @@ export function TriviaDetailedResults({
 
   const currentPlayer = finalScores.find((s) => s.playerId === currentUserId)
   const rank = currentPlayer?.rank ?? 1
+  // Solo runs only produce a single finalScores entry. Rank comparisons ("#1
+  // of 1") are misleading in that mode, so we strip them out of the UI.
+  const isSolo = finalScores.length <= 1
 
   const filteredHistory = useMemo(() => {
     switch (filter) {
@@ -118,170 +121,265 @@ export function TriviaDetailedResults({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[60] overflow-y-auto bg-[var(--background)]"
+      className="app-theme-marketing fixed inset-0 z-[60] overflow-y-auto bg-[var(--background)]"
     >
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-[61] border-b border-[var(--border)] bg-[var(--background)]/95 backdrop-blur-md">
-        <div className="mx-auto flex max-w-4xl items-center gap-4 px-6 py-4">
-          <button
-            onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] cursor-pointer"
-          >
-            <IconArrowLeft size={16} />
-          </button>
-          <div className="flex-1 min-w-0">
-            <h1 className="font-display text-lg font-bold text-[var(--text-primary)]">Trivia Results</h1>
-            <p className="text-xs text-[var(--text-tertiary)]">
-              {roundHistory.length} questions {'\u00B7'} {totalPoints.toLocaleString()} pts
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="font-mono text-lg font-bold text-[var(--text-primary)]">{accuracy}%</p>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">Accuracy</p>
+      <div className="marketing-rail-layout min-h-full overflow-hidden bg-[var(--background)]">
+        {/* Sticky Header — mirrors the marketing shell header treatment */}
+        <div
+          className="sticky top-0 z-[61] border-b border-[var(--marketing-hairline)] backdrop-blur-md"
+          style={{
+            background: 'var(--marketing-header-sticky-bg)',
+            borderBottomColor: 'var(--marketing-header-sticky-border)',
+          }}
+        >
+          <div className="mx-auto flex max-w-7xl items-center gap-4 px-6 py-4 lg:px-8">
+            <button
+              onClick={onClose}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] cursor-pointer"
+              aria-label="Close detailed results"
+            >
+              <IconArrowLeft size={16} />
+            </button>
+            <div className="flex min-w-0 flex-1 flex-col">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--marketing-accent)]">
+                Trivia
+              </p>
+              <h1 className="font-display text-lg font-bold tracking-[-0.02em] text-[var(--text-primary)] sm:text-xl">
+                Detailed results
+              </h1>
+            </div>
+            <div className="hidden items-center gap-4 text-right sm:flex">
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+                  Score
+                </p>
+                <p className="font-mono text-base font-semibold text-[var(--text-primary)]">
+                  {totalPoints.toLocaleString()}
+                  <span className="ml-1 text-xs text-[var(--text-tertiary)]">
+                    / {maxPoints.toLocaleString()}
+                  </span>
+                </p>
+              </div>
+              <div className="h-8 w-px bg-[var(--border)]" />
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+                  Accuracy
+                </p>
+                <p className="font-mono text-base font-semibold text-[var(--text-primary)]">
+                  {accuracy}%
+                </p>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="mx-auto max-w-4xl px-6 py-8 space-y-8">
-
-        {/* Performance Overview Cards */}
-        <div className="grid gap-4 md:grid-cols-4">
-          {[
-            { label: 'Rank', value: `#${rank}`, sub: `of ${finalScores.length}`, accent: 'var(--warning-500)' },
-            { label: 'Score', value: totalPoints.toLocaleString(), sub: `/ ${maxPoints.toLocaleString()}`, accent: 'var(--game-trivia)' },
-            { label: 'Correct', value: String(correct), sub: `of ${roundHistory.length}`, accent: 'var(--success-500)' },
-            { label: 'Accuracy', value: `${accuracy}%`, sub: correct > wrong ? 'Great!' : 'Keep trying', accent: accuracy >= 70 ? 'var(--success-500)' : 'var(--error-500)' },
-          ].map((card, i) => (
+        <section className="marketing-rail-section">
+          <div className="mx-auto max-w-7xl space-y-8 px-6 py-14 lg:px-8 lg:py-18">
             <motion.div
-              key={card.label}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="rounded-2xl border border-[var(--border)]/40 bg-[var(--surface)]/30 p-5 text-center"
+              transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
             >
-              <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--text-tertiary)]">{card.label}</p>
-              <p className="mt-2 font-display text-2xl font-bold" style={{ color: card.accent }}>
-                {card.value}
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--marketing-accent)]">
+                Round summary
               </p>
-              <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{card.sub}</p>
+              <h2 className="mt-3 font-display text-3xl font-bold tracking-[-0.03em] text-[var(--text-primary)] sm:text-4xl">
+                {roundHistory.length} questions answered
+              </h2>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--text-secondary)]">
+                Review every question, inspect answers, and see how your accuracy broke down round
+                by round.
+              </p>
             </motion.div>
-          ))}
-        </div>
 
-        {/* Charts Row */}
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* Donut Chart */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="rounded-2xl border border-[var(--border)]/40 bg-[var(--surface)]/30 p-6"
-          >
-            <p className="mb-4 text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
-              Answer Breakdown
-            </p>
-            <div className="flex items-center justify-center gap-6">
-              <DonutChart
-                segments={donutSegments}
-                size={140}
-                strokeWidth={18}
-                centerValue={`${correct}`}
-                centerLabel="Correct"
-              />
-              <div className="space-y-3">
-                {donutSegments.map((seg) => (
-                  <div key={seg.label} className="flex items-center gap-2.5">
-                    <span className="h-3 w-3 rounded-full" style={{ background: seg.color }} />
-                    <div>
-                      <p className="text-sm font-medium text-[var(--text-primary)]">{seg.value}</p>
-                      <p className="text-[10px] text-[var(--text-tertiary)]">{seg.label}</p>
-                    </div>
+            {/* Performance Overview Cards */}
+            <div
+              className={`grid gap-4 ${isSolo ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}
+            >
+              {(isSolo
+                ? [
+                    {
+                      label: 'Score',
+                      value: totalPoints.toLocaleString(),
+                      sub: `/ ${maxPoints.toLocaleString()}`,
+                      accent: 'var(--game-trivia)',
+                    },
+                    {
+                      label: 'Correct',
+                      value: String(correct),
+                      sub: `of ${roundHistory.length}`,
+                      accent: 'var(--success-500)',
+                    },
+                    {
+                      label: 'Accuracy',
+                      value: `${accuracy}%`,
+                      sub: correct > wrong ? 'Great!' : 'Keep trying',
+                      accent:
+                        accuracy >= 70 ? 'var(--success-500)' : 'var(--error-500)',
+                    },
+                  ]
+                : [
+                    {
+                      label: 'Rank',
+                      value: `#${rank}`,
+                      sub: `of ${finalScores.length}`,
+                      accent: 'var(--warning-500)',
+                    },
+                    {
+                      label: 'Score',
+                      value: totalPoints.toLocaleString(),
+                      sub: `/ ${maxPoints.toLocaleString()}`,
+                      accent: 'var(--game-trivia)',
+                    },
+                    {
+                      label: 'Correct',
+                      value: String(correct),
+                      sub: `of ${roundHistory.length}`,
+                      accent: 'var(--success-500)',
+                    },
+                    {
+                      label: 'Accuracy',
+                      value: `${accuracy}%`,
+                      sub: correct > wrong ? 'Great!' : 'Keep trying',
+                      accent:
+                        accuracy >= 70 ? 'var(--success-500)' : 'var(--error-500)',
+                    },
+                  ]
+              ).map((card, i) => (
+                <motion.div
+                  key={card.label}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="rounded-[22px] border border-[var(--border)] bg-[var(--surface)] p-5 text-center shadow-[var(--marketing-shadow)]"
+                >
+                  <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--text-tertiary)]">{card.label}</p>
+                  <p className="mt-2 font-display text-2xl font-bold" style={{ color: card.accent }}>
+                    {card.value}
+                  </p>
+                  <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{card.sub}</p>
+                </motion.div>
+              ))}
+            </div>
+
+            {/* Charts Row */}
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Donut Chart */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+                className="rounded-[22px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--marketing-shadow)]"
+              >
+                <p className="mb-4 text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
+                  Answer Breakdown
+                </p>
+                <div className="flex items-center justify-center gap-6">
+                  <DonutChart
+                    segments={donutSegments}
+                    size={140}
+                    strokeWidth={18}
+                    centerValue={`${correct}`}
+                    centerLabel="Correct"
+                  />
+                  <div className="space-y-3">
+                    {donutSegments
+                      .filter((seg) => seg.value > 0)
+                      .map((seg) => (
+                        <div key={seg.label} className="flex items-center gap-2.5">
+                          <span className="h-3 w-3 rounded-full" style={{ background: seg.color }} />
+                          <div>
+                            <p className="text-sm font-medium text-[var(--text-primary)]">{seg.value}</p>
+                            <p className="text-[10px] text-[var(--text-tertiary)]">{seg.label}</p>
+                          </div>
+                        </div>
+                      ))}
                   </div>
+                </div>
+              </motion.div>
+
+              {/* Score Progression */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="rounded-[22px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--marketing-shadow)]"
+              >
+                <p className="mb-4 text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
+                  Score Progression
+                </p>
+                {cumulativeScores.length > 1 ? (
+                  <SparkLine
+                    data={[0, ...cumulativeScores]}
+                    width={400}
+                    height={90}
+                    color="var(--game-trivia)"
+                    style={{ width: '100%' }}
+                  />
+                ) : (
+                  <p className="text-sm text-[var(--text-tertiary)]">Not enough data to display chart.</p>
+                )}
+              </motion.div>
+            </div>
+
+            {/* Per-Question Bar Chart */}
+            {perRoundBars.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25 }}
+                className="rounded-[22px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--marketing-shadow)]"
+              >
+                <p className="mb-4 text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
+                  Points Per Question
+                </p>
+                <VerticalBarChart data={perRoundBars} height={120} />
+              </motion.div>
+            )}
+
+            {/* Filter Bar */}
+            <div>
+              <p className="mb-4 text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
+                Question Details
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {filterButtons.map((fb) => (
+                  <button
+                    key={fb.key}
+                    onClick={() => setFilter(fb.key)}
+                    className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all cursor-pointer ${
+                      filter === fb.key
+                        ? 'border-transparent text-white shadow-md'
+                        : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+                    }`}
+                    style={filter === fb.key ? { background: fb.color } : undefined}
+                  >
+                    {fb.label}
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                      filter === fb.key ? 'bg-white/20' : 'bg-[var(--border)]/60'
+                    }`}>
+                      {fb.count}
+                    </span>
+                  </button>
                 ))}
               </div>
             </div>
-          </motion.div>
 
-          {/* Score Progression */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="rounded-2xl border border-[var(--border)]/40 bg-[var(--surface)]/30 p-6"
-          >
-            <p className="mb-4 text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
-              Score Progression
-            </p>
-            {cumulativeScores.length > 1 ? (
-              <SparkLine
-                data={[0, ...cumulativeScores]}
-                width={400}
-                height={90}
-                color="var(--game-trivia)"
-                style={{ width: '100%' }}
-              />
-            ) : (
-              <p className="text-sm text-[var(--text-tertiary)]">Not enough data to display chart.</p>
-            )}
-          </motion.div>
-        </div>
-
-        {/* Per-Question Bar Chart */}
-        {perRoundBars.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-            className="rounded-2xl border border-[var(--border)]/40 bg-[var(--surface)]/30 p-6"
-          >
-            <p className="mb-4 text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
-              Points Per Question
-            </p>
-            <VerticalBarChart data={perRoundBars} height={120} />
-          </motion.div>
-        )}
-
-        {/* Filter Bar */}
-        <div>
-          <p className="mb-4 text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
-            Question Details
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {filterButtons.map((fb) => (
-              <button
-                key={fb.key}
-                onClick={() => setFilter(fb.key)}
-                className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all cursor-pointer ${
-                  filter === fb.key
-                    ? 'border-transparent text-white shadow-md'
-                    : 'border-[var(--border)] bg-[var(--surface)]/30 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-                }`}
-                style={filter === fb.key ? { background: fb.color } : undefined}
-              >
-                {fb.label}
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                  filter === fb.key ? 'bg-white/20' : 'bg-[var(--border)]/50'
-                }`}>
-                  {fb.count}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Question Cards */}
-        <div className="space-y-4">
-          <AnimatePresence mode="popLayout">
-            {filteredHistory.map((entry, i) => (
-              <QuestionCard key={entry.roundNumber} entry={entry} index={i} />
-            ))}
-          </AnimatePresence>
-          {filteredHistory.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-[var(--border)] p-8 text-center">
-              <p className="text-sm text-[var(--text-tertiary)]">No questions match this filter.</p>
+            {/* Question Cards */}
+            <div className="space-y-4">
+              <AnimatePresence mode="popLayout">
+                {filteredHistory.map((entry, i) => (
+                  <QuestionCard key={entry.roundNumber} entry={entry} index={i} />
+                ))}
+              </AnimatePresence>
+              {filteredHistory.length === 0 && (
+                <div className="rounded-[22px] border border-dashed border-[var(--border)] bg-[var(--surface)] p-8 text-center">
+                  <p className="text-sm text-[var(--text-tertiary)]">No questions match this filter.</p>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        </section>
       </div>
     </motion.div>,
     document.body
@@ -305,7 +403,7 @@ function QuestionCard({ entry, index }: { entry: TriviaRoundHistoryEntry; index:
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
       transition={{ delay: index * 0.03 }}
-      className={`rounded-2xl border ${statusConfig.border} ${statusConfig.bg} overflow-hidden`}
+      className={`rounded-[22px] border ${statusConfig.border} ${statusConfig.bg} overflow-hidden shadow-[var(--marketing-shadow)]`}
     >
       {/* Header */}
       <button

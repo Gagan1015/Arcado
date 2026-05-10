@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 
 import { useToast } from '@/components/ui/Toast'
+import { staggerContainer, staggerItem } from '@/lib/motion'
 import { AdminTable, AdminTableChip } from './AdminTable'
 
 /* ── Types ──────────────────────────────────────────────────────────── */
@@ -59,11 +60,14 @@ interface TriviaQuestionItem {
 
 interface TriviaQuestionFilters {
   page: number
+  perPage: number
   status: string
   category: string
   difficulty: string
   region: string
   search: string
+  reported: boolean
+  restricted: boolean
 }
 
 interface AdminTriviaQuestionsClientProps {
@@ -72,6 +76,7 @@ interface AdminTriviaQuestionsClientProps {
   totalTriviaCount: number
   totalTriviaPages: number
   triviaPageSize: number
+  triviaPageSizeOptions: number[]
   availableStatuses: string[]
   availableCategories: string[]
   availableDifficulties: string[]
@@ -168,6 +173,7 @@ export function AdminTriviaQuestionsClient({
   totalTriviaCount,
   totalTriviaPages,
   triviaPageSize,
+  triviaPageSizeOptions,
   availableStatuses,
   availableCategories,
   availableDifficulties,
@@ -193,18 +199,25 @@ export function AdminTriviaQuestionsClient({
     Boolean(filters.status) ||
     Boolean(filters.category) ||
     Boolean(filters.difficulty) ||
-    Boolean(filters.region)
+    Boolean(filters.region) ||
+    filters.reported ||
+    filters.restricted
 
   function pushFilters(next: Partial<TriviaQuestionFilters>) {
     const params = new URLSearchParams()
     const merged = { ...filters, ...next }
 
     if (merged.page > 1) params.set('page', String(merged.page))
+    if (merged.perPage && merged.perPage !== triviaPageSizeOptions[0]) {
+      params.set('perPage', String(merged.perPage))
+    }
     if (merged.status) params.set('status', merged.status)
     if (merged.category) params.set('category', merged.category)
     if (merged.difficulty) params.set('difficulty', merged.difficulty)
     if (merged.region) params.set('region', merged.region)
     if (merged.search) params.set('search', merged.search)
+    if (merged.reported) params.set('reported', '1')
+    if (merged.restricted) params.set('restricted', '1')
 
     const query = params.toString()
     router.push(query ? `${pathname}?${query}` : pathname)
@@ -217,14 +230,32 @@ export function AdminTriviaQuestionsClient({
   function resetFilters() {
     const cleared: TriviaQuestionFilters = {
       page: 1,
+      perPage: triviaPageSize,
       status: '',
       category: '',
       difficulty: '',
       region: '',
       search: '',
+      reported: false,
+      restricted: false,
     }
     setDraftFilters(cleared)
     pushFilters(cleared)
+  }
+
+  // Stat cards act as quick filter toggles. Clicking a card that's already
+  // "on" clears its filter, so they double as on/off switches — same pattern
+  // as the rooms page.
+  function toggleRegion(region: string) {
+    pushFilters({ region: filters.region === region ? '' : region, page: 1 })
+  }
+
+  function toggleReported() {
+    pushFilters({ reported: !filters.reported, page: 1 })
+  }
+
+  function toggleRestricted() {
+    pushFilters({ restricted: !filters.restricted, page: 1 })
   }
 
   function openQuestion(question: TriviaQuestionItem) {
@@ -304,51 +335,110 @@ export function AdminTriviaQuestionsClient({
         </p>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-        {[
+      {/* Summary cards — clickable quick filters */}
+      {(() => {
+        const statCards: Array<{
+          label: string
+          value: number
+          icon: typeof BookOpen
+          color: string
+          active: boolean
+          onClick: () => void
+        }> = [
           {
             label: 'Total Questions',
             value: summary.totalQuestions,
             icon: BookOpen,
             color: 'var(--game-trivia)',
+            active: !hasActiveFilters,
+            onClick: () => resetFilters(),
           },
           {
             label: 'International',
             value: summary.internationalQuestions,
             icon: Globe,
             color: 'var(--primary-500)',
+            active: filters.region === 'international',
+            onClick: () => toggleRegion('international'),
           },
           {
             label: 'India',
             value: summary.indiaQuestions,
             icon: MapPin,
             color: 'var(--warning-500)',
+            active: filters.region === 'india',
+            onClick: () => toggleRegion('india'),
           },
           {
             label: 'Reported',
             value: summary.reportedQuestions,
             icon: ShieldAlert,
             color: 'var(--warning-500)',
+            active: filters.reported,
+            onClick: () => toggleReported(),
           },
           {
             label: 'Restricted',
             value: summary.restrictedQuestions,
             icon: Eye,
             color: 'var(--error-500)',
+            active: filters.restricted,
+            onClick: () => toggleRestricted(),
           },
-        ].map((stat) => (
-          <div key={stat.label} className="card">
-            <div className="flex items-center gap-2">
-              <stat.icon className="h-4 w-4" style={{ color: stat.color }} />
-              <p className="text-xs font-medium text-[var(--text-tertiary)]">{stat.label}</p>
-            </div>
-            <p className="mt-2 text-2xl font-bold text-[var(--text-primary)]">
-              {stat.value.toLocaleString()}
-            </p>
-          </div>
-        ))}
-      </div>
+        ]
+
+        return (
+          <motion.div
+            variants={staggerContainer}
+            initial="initial"
+            animate="animate"
+            className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5"
+          >
+            {statCards.map((stat) => (
+              <motion.button
+                key={stat.label}
+                variants={staggerItem}
+                type="button"
+                onClick={stat.onClick}
+                aria-pressed={stat.active}
+                className="card group relative w-full text-left transition-all hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-500)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                style={
+                  stat.active
+                    ? {
+                        borderColor: stat.color,
+                        boxShadow: `0 0 0 1px ${stat.color}`,
+                      }
+                    : undefined
+                }
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-[var(--text-tertiary)]">{stat.label}</p>
+                    <p className="mt-1 text-2xl font-bold" style={{ color: stat.color }}>
+                      {stat.value.toLocaleString()}
+                    </p>
+                  </div>
+                  <div
+                    className="flex h-10 w-10 items-center justify-center rounded-xl"
+                    style={{
+                      backgroundColor: `color-mix(in srgb, ${stat.color} 15%, transparent)`,
+                    }}
+                  >
+                    <stat.icon className="h-5 w-5" style={{ color: stat.color }} />
+                  </div>
+                </div>
+                {stat.active && (
+                  <span
+                    className="absolute right-2 top-2 h-2 w-2 rounded-full"
+                    style={{ background: stat.color }}
+                    aria-hidden="true"
+                  />
+                )}
+              </motion.button>
+            ))}
+          </motion.div>
+        )
+      })()}
 
       {/* Filters */}
       <div className="card">
@@ -462,38 +552,78 @@ export function AdminTriviaQuestionsClient({
       <AdminTable<TriviaQuestionItem>
         rows={triviaQuestions}
         rowKey={(q) => q.id}
+        startIndex={(filters.page - 1) * triviaPageSize}
         empty={{
           icon: FileText,
           title: 'No trivia questions matched these filters',
           description: 'Try clearing one of the filters or broadening the search.',
         }}
-        footer={
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p>
-              Page {filters.page} of {totalTriviaPages} with {totalTriviaCount} question
-              {totalTriviaCount === 1 ? '' : 's'}.
-            </p>
-            <div className="flex items-center gap-2">
-              <span>{triviaPageSize} per page</span>
-              <button
-                onClick={() => pushFilters({ page: filters.page - 1 })}
-                disabled={filters.page <= 1}
-                className="btn btn-ghost btn-sm"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Prev
-              </button>
-              <button
-                onClick={() => pushFilters({ page: filters.page + 1 })}
-                disabled={filters.page >= totalTriviaPages}
-                className="btn btn-ghost btn-sm"
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </button>
+        footer={(() => {
+          const rangeStart =
+            totalTriviaCount === 0 ? 0 : (filters.page - 1) * triviaPageSize + 1
+          const rangeEnd = Math.min(filters.page * triviaPageSize, totalTriviaCount)
+
+          return (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p>
+                Showing {rangeStart}–{rangeEnd} of {totalTriviaCount.toLocaleString()} question
+                {totalTriviaCount === 1 ? '' : 's'}
+                {hasActiveFilters && (
+                  <span className="text-[var(--text-tertiary)]">
+                    {' '}
+                    (filtered from {summary.totalQuestions.toLocaleString()})
+                  </span>
+                )}
+              </p>
+
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 text-[var(--text-tertiary)]">
+                  <span className="hidden sm:inline">Rows</span>
+                  <div className="relative">
+                    <select
+                      value={triviaPageSize}
+                      onChange={(event) =>
+                        pushFilters({
+                          perPage: Number(event.target.value) as TriviaQuestionFilters['perPage'],
+                          page: 1,
+                        })
+                      }
+                      className="input !py-1 appearance-none pr-7 !text-xs"
+                      aria-label="Rows per page"
+                    >
+                      {triviaPageSizeOptions.map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-tertiary)]" />
+                  </div>
+                </label>
+
+                <button
+                  onClick={() => pushFilters({ page: filters.page - 1 })}
+                  disabled={filters.page <= 1}
+                  className="btn btn-ghost btn-sm"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="tabular-nums text-[var(--text-secondary)]">
+                  Page {filters.page} / {totalTriviaPages}
+                </span>
+                <button
+                  onClick={() => pushFilters({ page: filters.page + 1 })}
+                  disabled={filters.page >= totalTriviaPages}
+                  className="btn btn-ghost btn-sm"
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
-          </div>
-        }
+          )
+        })()}
         columns={[
           {
             key: 'question',

@@ -650,8 +650,15 @@ export default function StatsClient({ gameStats, recentResults }: StatsClientPro
                             {GAME_META[result.gameId]?.label ?? result.gameId}
                           </p>
                           <span
-                            className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-tertiary)]"
-                            style={{ background: 'var(--surface-hover)' }}
+                            className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]"
+                            style={{
+                              background: result.isSolo
+                                ? 'rgba(59, 130, 246, 0.14)'
+                                : 'rgba(16, 185, 129, 0.14)',
+                              color: result.isSolo
+                                ? 'var(--primary-500)'
+                                : 'var(--success-500)',
+                            }}
                           >
                             {result.isSolo ? 'Solo' : 'Multi'}
                           </span>

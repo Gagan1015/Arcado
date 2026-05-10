@@ -2,13 +2,15 @@
 
 import { motion } from 'motion/react'
 import Link from 'next/link'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AtSign,
   Ban,
   Calendar,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Circle,
   Crown,
   Eye,
@@ -70,6 +72,12 @@ const STATUS_CONFIG: Record<string, { label: string; badge: string; dot: string 
   BANNED: { label: 'Banned', badge: 'badge-error', dot: 'bg-[var(--error-500)]' },
 }
 
+type StatusFilter = 'ALL' | 'ACTIVE' | 'SUSPENDED' | 'BANNED'
+type RoleFilter = 'ALL' | 'USER' | 'MODERATOR' | 'ADMIN' | 'SUPER_ADMIN'
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100] as const
+type PageSize = (typeof PAGE_SIZE_OPTIONS)[number]
+
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('en-US', {
     year: 'numeric',
@@ -92,8 +100,10 @@ export function AdminUsersClient({
   currentAdminRole,
 }: AdminUsersClientProps) {
   const [searchQuery, setSearchQuery] = useState('')
-  const [roleFilter, setRoleFilter] = useState('ALL')
-  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('ALL')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState<PageSize>(25)
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; openUp: boolean } | null>(
     null,
@@ -135,15 +145,49 @@ export function AdminUsersClient({
     setDropdownPos(null)
   }, [])
 
-  const filtered = users.filter((user) => {
-    const matchSearch =
-      !searchQuery ||
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchRole = roleFilter === 'ALL' || user.role === roleFilter
-    const matchStatus = statusFilter === 'ALL' || user.status === statusFilter
-    return matchSearch && matchRole && matchStatus
-  })
+  const hasActiveFilters =
+    Boolean(searchQuery) || roleFilter !== 'ALL' || statusFilter !== 'ALL'
+
+  function resetFilters() {
+    setSearchQuery('')
+    setRoleFilter('ALL')
+    setStatusFilter('ALL')
+    setPage(1)
+  }
+
+  // Clicking a stat card that's already active clears its filter, so cards
+  // double as quick on/off switches (same as rooms / trivia pages).
+  function toggleStatus(next: Exclude<StatusFilter, 'ALL'>) {
+    setStatusFilter((current) => (current === next ? 'ALL' : next))
+    setPage(1)
+  }
+
+  const filtered = useMemo(() => {
+    const q = searchQuery.toLowerCase()
+    return users.filter((user) => {
+      const matchSearch =
+        !q ||
+        user.name.toLowerCase().includes(q) ||
+        user.email.toLowerCase().includes(q)
+      const matchRole = roleFilter === 'ALL' || user.role === roleFilter
+      const matchStatus = statusFilter === 'ALL' || user.status === statusFilter
+      return matchSearch && matchRole && matchStatus
+    })
+  }, [users, searchQuery, roleFilter, statusFilter])
+
+  // Snap back to a valid page when filters shrink the result set below the
+  // current page window.
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filtered.length / pageSize))
+    if (page > maxPage) {
+      setPage(maxPage)
+    }
+  }, [filtered.length, pageSize, page])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const start = (page - 1) * pageSize
+  const end = Math.min(start + pageSize, filtered.length)
+  const paginated = filtered.slice(start, end)
 
   const stats = {
     total: users.length,
@@ -236,26 +280,101 @@ export function AdminUsersClient({
         </div>
       )}
 
-      <motion.div
-        variants={staggerContainer}
-        initial="initial"
-        animate="animate"
-        className="grid grid-cols-2 gap-3 sm:grid-cols-4"
-      >
-        {[
-          { label: 'Total Users', value: stats.total, color: 'var(--primary-500)' },
-          { label: 'Active', value: stats.active, color: 'var(--success-500)' },
-          { label: 'Suspended', value: stats.suspended, color: 'var(--warning-500)' },
-          { label: 'Banned', value: stats.banned, color: 'var(--error-500)' },
-        ].map((stat) => (
-          <motion.div key={stat.label} variants={staggerItem} className="card">
-            <p className="text-xs font-medium text-[var(--text-tertiary)]">{stat.label}</p>
-            <p className="mt-1 text-2xl font-bold" style={{ color: stat.color }}>
-              {stat.value}
-            </p>
+      {(() => {
+        const statCards: Array<{
+          label: string
+          value: number
+          icon: typeof Users
+          color: string
+          active: boolean
+          onClick: () => void
+        }> = [
+          {
+            label: 'Total Users',
+            value: stats.total,
+            icon: Users,
+            color: 'var(--primary-500)',
+            active: !hasActiveFilters,
+            onClick: () => resetFilters(),
+          },
+          {
+            label: 'Active',
+            value: stats.active,
+            icon: CheckCircle2,
+            color: 'var(--success-500)',
+            active: statusFilter === 'ACTIVE',
+            onClick: () => toggleStatus('ACTIVE'),
+          },
+          {
+            label: 'Suspended',
+            value: stats.suspended,
+            icon: PauseCircle,
+            color: 'var(--warning-500)',
+            active: statusFilter === 'SUSPENDED',
+            onClick: () => toggleStatus('SUSPENDED'),
+          },
+          {
+            label: 'Banned',
+            value: stats.banned,
+            icon: Ban,
+            color: 'var(--error-500)',
+            active: statusFilter === 'BANNED',
+            onClick: () => toggleStatus('BANNED'),
+          },
+        ]
+
+        return (
+          <motion.div
+            variants={staggerContainer}
+            initial="initial"
+            animate="animate"
+            className="grid grid-cols-2 gap-3 sm:grid-cols-4"
+          >
+            {statCards.map((stat) => (
+              <motion.button
+                key={stat.label}
+                variants={staggerItem}
+                type="button"
+                onClick={stat.onClick}
+                aria-pressed={stat.active}
+                className="card group relative w-full text-left transition-all hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-500)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                style={
+                  stat.active
+                    ? {
+                        borderColor: stat.color,
+                        boxShadow: `0 0 0 1px ${stat.color}`,
+                      }
+                    : undefined
+                }
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-[var(--text-tertiary)]">{stat.label}</p>
+                    <p className="mt-1 text-2xl font-bold" style={{ color: stat.color }}>
+                      {stat.value}
+                    </p>
+                  </div>
+                  <div
+                    className="flex h-10 w-10 items-center justify-center rounded-xl"
+                    style={{
+                      backgroundColor: `color-mix(in srgb, ${stat.color} 15%, transparent)`,
+                    }}
+                  >
+                    <stat.icon className="h-5 w-5" style={{ color: stat.color }} />
+                  </div>
+                </div>
+                {stat.active && (
+                  <span
+                    className="absolute right-2 top-2 h-2 w-2 rounded-full"
+                    style={{ background: stat.color }}
+                    aria-hidden="true"
+                  />
+                )}
+              </motion.button>
+            ))}
           </motion.div>
-        ))}
-      </motion.div>
+        )
+      })()}
 
       <div className="card">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -265,7 +384,10 @@ export function AdminUsersClient({
               type="text"
               placeholder="Search by name or email..."
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={(event) => {
+                setSearchQuery(event.target.value)
+                setPage(1)
+              }}
               className="input pl-10"
             />
           </div>
@@ -273,7 +395,10 @@ export function AdminUsersClient({
           <div className="relative">
             <select
               value={roleFilter}
-              onChange={(event) => setRoleFilter(event.target.value)}
+              onChange={(event) => {
+                setRoleFilter(event.target.value as RoleFilter)
+                setPage(1)
+              }}
               className="input appearance-none pr-8 sm:w-40"
             >
               <option value="ALL">All Roles</option>
@@ -288,7 +413,10 @@ export function AdminUsersClient({
           <div className="relative">
             <select
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
+              onChange={(event) => {
+                setStatusFilter(event.target.value as StatusFilter)
+                setPage(1)
+              }}
               className="input appearance-none pr-8 sm:w-40"
             >
               <option value="ALL">All Status</option>
@@ -307,8 +435,9 @@ export function AdminUsersClient({
         transition={{ delay: 0.2 }}
       >
         <AdminTable<User>
-          rows={filtered}
+          rows={paginated}
           rowKey={(user) => user.id}
+          startIndex={start}
           rowClassName={(user) => (loading === user.id ? 'opacity-50' : undefined)}
           empty={{
             icon: Users,
@@ -316,10 +445,65 @@ export function AdminUsersClient({
             description: 'Try adjusting your search or filters.',
           }}
           footer={
-            <div className="flex items-center justify-between">
-              <span>
-                Showing {filtered.length} of {users.length} users
-              </span>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-3">
+                <span>
+                  Showing {filtered.length === 0 ? 0 : start + 1}–{end} of {filtered.length} user
+                  {filtered.length === 1 ? '' : 's'}
+                  {filtered.length !== users.length && (
+                    <span className="text-[var(--text-tertiary)]">
+                      {' '}
+                      (filtered from {users.length})
+                    </span>
+                  )}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 text-[var(--text-tertiary)]">
+                  <span className="hidden sm:inline">Rows</span>
+                  <div className="relative">
+                    <select
+                      value={pageSize}
+                      onChange={(event) => {
+                        setPageSize(Number(event.target.value) as PageSize)
+                        setPage(1)
+                      }}
+                      className="input !py-1 appearance-none pr-7 !text-xs"
+                      aria-label="Rows per page"
+                    >
+                      {PAGE_SIZE_OPTIONS.map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-tertiary)]" />
+                  </div>
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  disabled={page <= 1}
+                  className="btn btn-ghost btn-sm"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="tabular-nums text-[var(--text-secondary)]">
+                  Page {page} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                  disabled={page >= totalPages}
+                  className="btn btn-ghost btn-sm"
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           }
           columns={[
@@ -523,12 +707,6 @@ export function AdminUsersClient({
               </>
             )
           })()}
-
-        <div className="flex items-center justify-between border-t border-[var(--border)] px-5 py-3">
-          <p className="text-xs text-[var(--text-tertiary)]">
-            Showing {filtered.length} of {users.length} users
-          </p>
-        </div>
       </motion.div>
 
       {pendingAction && (

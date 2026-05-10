@@ -1,7 +1,19 @@
 import { prisma } from '@arcado/db'
 import type { Prisma } from '@arcado/db'
 
-export const TRIVIA_BROWSER_PAGE_SIZE = 20
+export const TRIVIA_BROWSER_PAGE_SIZE_OPTIONS = [25, 50, 100] as const
+
+export type TriviaPageSize = (typeof TRIVIA_BROWSER_PAGE_SIZE_OPTIONS)[number]
+
+export const TRIVIA_BROWSER_DEFAULT_PAGE_SIZE: TriviaPageSize = 25
+
+// Kept for backwards compatibility with any callers that imported the old
+// constant. Prefer `TRIVIA_BROWSER_DEFAULT_PAGE_SIZE` or the per-request
+// `perPage` filter going forward.
+export const TRIVIA_BROWSER_PAGE_SIZE = TRIVIA_BROWSER_DEFAULT_PAGE_SIZE
+
+// The status values that the "Restricted" quick-filter card expands into.
+export const TRIVIA_RESTRICTED_STATUSES = ['hidden', 'rejected', 'escalated'] as const
 
 export const TRIVIA_LIFECYCLE_STATUSES = [
   'approved',
@@ -15,30 +27,54 @@ export type TriviaLifecycleStatus = (typeof TRIVIA_LIFECYCLE_STATUSES)[number]
 
 export type TriviaQuestionFilters = {
   page: number
+  perPage: TriviaPageSize
   status: string
   category: string
   difficulty: string
   region: string
   search: string
+  reported: boolean
+  restricted: boolean
+}
+
+function parseBooleanFlag(value: string | undefined) {
+  if (!value) return false
+  const normalized = value.trim().toLowerCase()
+  return normalized === '1' || normalized === 'true' || normalized === 'yes'
+}
+
+function parsePerPage(value: string | undefined): TriviaPageSize {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) {
+    return TRIVIA_BROWSER_DEFAULT_PAGE_SIZE
+  }
+  const matched = TRIVIA_BROWSER_PAGE_SIZE_OPTIONS.find((option) => option === parsed)
+  return matched ?? TRIVIA_BROWSER_DEFAULT_PAGE_SIZE
 }
 
 export function normalizeTriviaQuestionFilters(input: {
   page?: string
+  perPage?: string
   status?: string
   category?: string
   difficulty?: string
   region?: string
   search?: string
+  reported?: string
+  restricted?: string
 }): TriviaQuestionFilters {
   const parsedPage = Number(input.page ?? '1')
 
   return {
     page: Number.isFinite(parsedPage) && parsedPage > 0 ? Math.floor(parsedPage) : 1,
+    perPage: parsePerPage(input.perPage),
     status: input.status?.trim() ?? '',
     category: input.category?.trim() ?? '',
     difficulty: input.difficulty?.trim() ?? '',
     region: input.region?.trim() ?? '',
     search: input.search?.trim() ?? '',
+    reported: parseBooleanFlag(input.reported),
+    restricted: parseBooleanFlag(input.restricted),
   }
 }
 
@@ -94,7 +130,8 @@ export async function getAdminGamesPageData() {
 
 export async function getAdminTriviaQuestionsPageData(filters: TriviaQuestionFilters) {
   const where = buildTriviaQuestionWhere(filters)
-  const skip = (filters.page - 1) * TRIVIA_BROWSER_PAGE_SIZE
+  const pageSize = filters.perPage
+  const skip = (filters.page - 1) * pageSize
 
   const [
     totalTriviaCount,
@@ -117,7 +154,7 @@ export async function getAdminTriviaQuestionsPageData(filters: TriviaQuestionFil
         { createdAt: 'desc' },
       ],
       skip,
-      take: TRIVIA_BROWSER_PAGE_SIZE,
+      take: pageSize,
     }),
     prisma.triviaQuestion.findMany({
       distinct: ['category'],
@@ -236,8 +273,9 @@ export async function getAdminTriviaQuestionsPageData(filters: TriviaQuestionFil
     })),
     filters,
     totalTriviaCount,
-    triviaPageSize: TRIVIA_BROWSER_PAGE_SIZE,
-    totalTriviaPages: Math.max(1, Math.ceil(totalTriviaCount / TRIVIA_BROWSER_PAGE_SIZE)),
+    triviaPageSize: pageSize,
+    triviaPageSizeOptions: Array.from(TRIVIA_BROWSER_PAGE_SIZE_OPTIONS),
+    totalTriviaPages: Math.max(1, Math.ceil(totalTriviaCount / pageSize)),
     availableStatuses: Array.from(TRIVIA_LIFECYCLE_STATUSES),
     availableCategories: distinctCategories.map((entry) => entry.category),
     availableDifficulties: distinctDifficulties.map((entry) => entry.difficulty),
@@ -269,6 +307,14 @@ function buildTriviaQuestionWhere(filters: TriviaQuestionFilters) {
 
   if (filters.region) {
     andClauses.push({ region: filters.region })
+  }
+
+  if (filters.reported) {
+    andClauses.push({ reportCount: { gt: 0 } })
+  }
+
+  if (filters.restricted) {
+    andClauses.push({ status: { in: Array.from(TRIVIA_RESTRICTED_STATUSES) } })
   }
 
   if (filters.search) {

@@ -76,6 +76,7 @@ export default async function RecentGameDetailPage({ params, searchParams }: Pag
     score: match.score,
     rank: match.rank,
     isWinner: match.isWinner,
+    isSolo: match.isSolo,
     duration: match.duration,
     createdAt: match.createdAt.toISOString(),
     metadata: (match.metadata as PersistedGameResultMetadata | null) ?? null,

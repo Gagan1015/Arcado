@@ -15,11 +15,14 @@ export default async function AdminTriviaQuestionsPage({
 }) {
   const filters = normalizeTriviaQuestionFilters({
     page: getSingleValue(searchParams.page),
+    perPage: getSingleValue(searchParams.perPage),
     status: getSingleValue(searchParams.status),
     category: getSingleValue(searchParams.category),
     difficulty: getSingleValue(searchParams.difficulty),
     region: getSingleValue(searchParams.region),
     search: getSingleValue(searchParams.search),
+    reported: getSingleValue(searchParams.reported),
+    restricted: getSingleValue(searchParams.restricted),
   })
 
   const result = await getAdminTriviaQuestionsPageData(filters)
@@ -31,6 +34,7 @@ export default async function AdminTriviaQuestionsPage({
       totalTriviaCount={result.totalTriviaCount}
       totalTriviaPages={result.totalTriviaPages}
       triviaPageSize={result.triviaPageSize}
+      triviaPageSizeOptions={result.triviaPageSizeOptions}
       availableStatuses={result.availableStatuses}
       availableCategories={result.availableCategories}
       availableDifficulties={result.availableDifficulties}

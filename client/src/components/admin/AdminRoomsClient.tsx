@@ -383,6 +383,7 @@ export function AdminRoomsClient({ rooms }: AdminRoomsClientProps) {
         <AdminTable<Room>
           rows={paginated}
           rowKey={(room) => room.id}
+          startIndex={start}
           onRowClick={(room) => router.push(`/admin/rooms/${room.id}`)}
           empty={{
             icon: DoorOpen,

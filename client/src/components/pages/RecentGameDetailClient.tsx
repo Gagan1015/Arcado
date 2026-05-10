@@ -43,6 +43,7 @@ interface MatchDetail {
   score: number
   rank: number | null
   isWinner: boolean
+  isSolo: boolean
   duration: number | null
   createdAt: string
   metadata: PersistedGameResultMetadata | null
@@ -563,7 +564,8 @@ export default function RecentGameDetailClient({
                   {game.label}
                 </h1>
                 <p className="mt-3 max-w-2xl text-base leading-8 text-[var(--text-secondary)]">
-                  Match in room {match.room.code}, finished {formatRelative(match.createdAt)} with a score of{' '}
+                  {match.isSolo ? 'Solo match' : 'Match'} in room {match.room.code}, finished{' '}
+                  {formatRelative(match.createdAt)} with a score of{' '}
                   {match.score.toLocaleString()}.
                 </p>
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -573,6 +575,19 @@ export default function RecentGameDetailClient({
                   >
                     {game.label}
                   </span>
+                  <span
+                    className="rounded-full px-3 py-1 text-xs font-semibold"
+                    style={{
+                      background: match.isSolo
+                        ? 'rgba(59, 130, 246, 0.14)'
+                        : 'rgba(16, 185, 129, 0.14)',
+                      color: match.isSolo
+                        ? 'var(--primary-500)'
+                        : 'var(--success-500)',
+                    }}
+                  >
+                    {match.isSolo ? 'Solo' : 'Multiplayer'}
+                  </span>
                   <span className="rounded-full bg-[var(--surface-hover)] px-3 py-1 text-xs font-semibold text-[var(--text-secondary)]">
                     Room {match.room.code}
                   </span>
@@ -581,7 +596,7 @@ export default function RecentGameDetailClient({
                   </span>
                   {match.isWinner && (
                     <span className="rounded-full bg-[rgba(16,185,129,0.15)] px-3 py-1 text-xs font-semibold text-[var(--success-500)]">
-                      Winner
+                      {match.isSolo ? 'Solved' : 'Winner'}
                     </span>
                   )}
                 </div>
@@ -589,12 +604,36 @@ export default function RecentGameDetailClient({
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:w-[360px]">
-              {[
-                { label: 'Score', value: `${match.score.toLocaleString()} pts`, icon: Trophy },
-                { label: 'Placement', value: formatPlacement(match.rank, playerCount), icon: Medal },
-                { label: 'Players', value: `${playerCount}`, icon: Users },
-                { label: 'Duration', value: formatDuration(duration), icon: Clock3 },
-              ].map((item) => {
+              {(match.isSolo
+                ? [
+                    {
+                      label: 'Score',
+                      value: `${match.score.toLocaleString()} pts`,
+                      icon: Trophy,
+                    },
+                    {
+                      label: 'Result',
+                      value: match.isWinner ? 'Solved' : 'Not solved',
+                      icon: Medal,
+                    },
+                    { label: 'Mode', value: 'Solo', icon: Users },
+                    { label: 'Duration', value: formatDuration(duration), icon: Clock3 },
+                  ]
+                : [
+                    {
+                      label: 'Score',
+                      value: `${match.score.toLocaleString()} pts`,
+                      icon: Trophy,
+                    },
+                    {
+                      label: 'Placement',
+                      value: formatPlacement(match.rank, playerCount),
+                      icon: Medal,
+                    },
+                    { label: 'Players', value: `${playerCount}`, icon: Users },
+                    { label: 'Duration', value: formatDuration(duration), icon: Clock3 },
+                  ]
+              ).map((item) => {
                 const Icon = item.icon
                 return (
                   <div
@@ -616,85 +655,87 @@ export default function RecentGameDetailClient({
 
       <div className="mt-10 grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-8">
-          <motion.div
-            className="rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--marketing-shadow)]"
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
-                  Leaderboard
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
-                  Final standings
-                </h2>
+          {!match.isSolo && (
+            <motion.div
+              className="rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--marketing-shadow)]"
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+                    Leaderboard
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+                    Final standings
+                  </h2>
+                </div>
+                <p className="text-sm text-[var(--text-secondary)]">{playerCount} players</p>
               </div>
-              <p className="text-sm text-[var(--text-secondary)]">{playerCount} players</p>
-            </div>
 
-            <div className="mt-6 space-y-3">
-              {rankedResults.map((entry, index) => {
-                const isCurrentUser = entry.userId === currentUserId
+              <div className="mt-6 space-y-3">
+                {rankedResults.map((entry, index) => {
+                  const isCurrentUser = entry.userId === currentUserId
 
-                return (
-                  <motion.div
-                    key={entry.id}
-                    className={[
-                      'flex flex-col gap-3 rounded-[22px] border px-4 py-4 sm:flex-row sm:items-center sm:justify-between',
-                      isCurrentUser
-                        ? 'border-[var(--marketing-accent)] bg-[var(--marketing-accent)]/10'
-                        : 'border-[var(--border)] bg-[var(--background)]/55',
-                    ].join(' ')}
-                    initial={{ opacity: 0, y: 18 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, delay: 0.14 + index * 0.05, ease: [0.16, 1, 0.3, 1] }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold"
-                        style={{
-                          background: entry.isWinner ? 'rgba(16,185,129,0.15)' : 'var(--surface)',
-                          color: entry.isWinner ? 'var(--success-500)' : 'var(--text-secondary)',
-                        }}
-                      >
-                        {entry.rank ?? '-'}
-                      </div>
-                      <UserAvatar
-                        src={entry.user.image}
-                        name={entry.user.name ?? 'Player'}
-                        alt={entry.user.name ?? 'Player'}
-                        className="h-11 w-11 rounded-full border border-[var(--border)]"
-                        fallbackClassName="bg-[var(--surface-hover)] text-sm font-semibold text-[var(--text-primary)]"
-                        iconClassName="h-4 w-4"
-                      />
-                      <div>
-                        <p className="text-sm font-semibold text-[var(--text-primary)]">
-                          {entry.user.name ?? 'Player'}
-                          {isCurrentUser ? ' (You)' : ''}
-                        </p>
-                        <div className="mt-1 flex flex-wrap gap-2">
-                          {entry.isWinner && (
-                            <span className="rounded-full bg-[rgba(16,185,129,0.15)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--success-500)]">
-                              Winner
+                  return (
+                    <motion.div
+                      key={entry.id}
+                      className={[
+                        'flex flex-col gap-3 rounded-[22px] border px-4 py-4 sm:flex-row sm:items-center sm:justify-between',
+                        isCurrentUser
+                          ? 'border-[var(--marketing-accent)] bg-[var(--marketing-accent)]/10'
+                          : 'border-[var(--border)] bg-[var(--background)]/55',
+                      ].join(' ')}
+                      initial={{ opacity: 0, y: 18 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: 0.14 + index * 0.05, ease: [0.16, 1, 0.3, 1] }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold"
+                          style={{
+                            background: entry.isWinner ? 'rgba(16,185,129,0.15)' : 'var(--surface)',
+                            color: entry.isWinner ? 'var(--success-500)' : 'var(--text-secondary)',
+                          }}
+                        >
+                          {entry.rank ?? '-'}
+                        </div>
+                        <UserAvatar
+                          src={entry.user.image}
+                          name={entry.user.name ?? 'Player'}
+                          alt={entry.user.name ?? 'Player'}
+                          className="h-11 w-11 rounded-full border border-[var(--border)]"
+                          fallbackClassName="bg-[var(--surface-hover)] text-sm font-semibold text-[var(--text-primary)]"
+                          iconClassName="h-4 w-4"
+                        />
+                        <div>
+                          <p className="text-sm font-semibold text-[var(--text-primary)]">
+                            {entry.user.name ?? 'Player'}
+                            {isCurrentUser ? ' (You)' : ''}
+                          </p>
+                          <div className="mt-1 flex flex-wrap gap-2">
+                            {entry.isWinner && (
+                              <span className="rounded-full bg-[rgba(16,185,129,0.15)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--success-500)]">
+                                Winner
+                              </span>
+                            )}
+                            <span className="rounded-full bg-[var(--surface)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--text-secondary)]">
+                              {entry.rank != null ? `#${entry.rank}` : 'Completed'}
                             </span>
-                          )}
-                          <span className="rounded-full bg-[var(--surface)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--text-secondary)]">
-                            {entry.rank != null ? `#${entry.rank}` : 'Completed'}
-                          </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <p className="text-right font-mono text-lg font-semibold text-[var(--text-primary)]">
-                      {entry.score.toLocaleString()} pts
-                    </p>
-                  </motion.div>
-                )
-              })}
-            </div>
-          </motion.div>
+                      <p className="text-right font-mono text-lg font-semibold text-[var(--text-primary)]">
+                        {entry.score.toLocaleString()} pts
+                      </p>
+                    </motion.div>
+                  )
+                })}
+              </div>
+            </motion.div>
+          )}
 
           {renderMetadataSection(match.metadata)}
         </div>
@@ -743,7 +784,9 @@ export default function RecentGameDetailClient({
                   <Users className="h-4 w-4" />
                   Capacity
                 </dt>
-                <dd className="font-medium text-[var(--text-primary)]">{match.room.maxPlayers} seats</dd>
+                <dd className="font-medium text-[var(--text-primary)]">
+                  {match.isSolo ? 'Solo' : `${match.room.maxPlayers} seats`}
+                </dd>
               </div>
               <div className="flex items-start justify-between gap-4">
                 <dt className="flex items-center gap-2 text-[var(--text-tertiary)]">

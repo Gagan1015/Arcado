@@ -67,6 +67,12 @@ interface AdminTableProps<Row> {
   footer?: ReactNode
   /** Hide the leading row-number column if you don't want it. */
   hideRowNumbers?: boolean
+  /**
+   * First row number to display in the index column. Defaults to 1. Pass
+   * `(page - 1) * pageSize` for paginated tables so numbering continues
+   * across pages.
+   */
+  startIndex?: number
 }
 
 export function AdminTable<Row>({
@@ -78,6 +84,7 @@ export function AdminTable<Row>({
   empty,
   footer,
   hideRowNumbers = false,
+  startIndex = 0,
 }: AdminTableProps<Row>) {
   const colCount = columns.length + (hideRowNumbers ? 0 : 1)
   const clickable = Boolean(onRowClick)
@@ -132,7 +139,9 @@ export function AdminTable<Row>({
                     onClick={clickable ? () => onRowClick?.(row, index) : undefined}
                   >
                     {!hideRowNumbers && (
-                      <td className="admin-table-td admin-table-td-index">{index + 1}</td>
+                      <td className="admin-table-td admin-table-td-index">
+                        {startIndex + index + 1}
+                      </td>
                     )}
                     {columns.map((column, colIndex) => (
                       <td

@@ -749,8 +749,8 @@ html[data-theme-transition='bottom-left']::view-transition-new(root) {
    ══════════════════════════════════════════════════════════════════════════ */
 
 .admin-table-shell {
-  --admin-table-border: var(--border);
-  --admin-table-border-subtle: var(--border-subtle, var(--border));
+  --admin-table-border: var(--border-strong, var(--border));
+  --admin-table-border-subtle: var(--border);
   --admin-table-header-bg: color-mix(in srgb, var(--surface-hover) 55%, transparent);
   --admin-table-row-hover: color-mix(in srgb, var(--surface-hover) 70%, transparent);
   --admin-table-chip-bg: color-mix(in srgb, var(--surface-hover) 75%, transparent);

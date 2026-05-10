@@ -34,6 +34,15 @@ export function DonutChart({
   const circumference = 2 * Math.PI * radius
   const total = segments.reduce((sum, s) => sum + s.value, 0)
 
+  // Only round the caps when one segment covers the full ring. With multiple
+  // visible segments the round caps bleed past each segment boundary into
+  // the neighbouring colour, producing a phantom sliver at every join.
+  const visibleSegmentCount = segments.reduce(
+    (count, seg) => (seg.value > 0 ? count + 1 : count),
+    0,
+  )
+  const useRoundCap = visibleSegmentCount <= 1
+
   let accumulated = 0
 
   return (
@@ -51,6 +60,13 @@ export function DonutChart({
         />
         {total > 0 &&
           segments.map((seg, i) => {
+            // Skip zero-value segments entirely. Round line caps would
+            // otherwise render a small dot at the segment's start position,
+            // making it look like the category still has a slice on the ring.
+            if (seg.value <= 0) {
+              return null
+            }
+
             const segLen = (seg.value / total) * circumference
             const offset = (accumulated / total) * circumference
             accumulated += seg.value
@@ -64,7 +80,7 @@ export function DonutChart({
                 fill="none"
                 stroke={seg.color}
                 strokeWidth={strokeWidth}
-                strokeLinecap="round"
+                strokeLinecap={useRoundCap ? 'round' : 'butt'}
                 strokeDasharray={`${segLen} ${circumference - segLen}`}
                 strokeDashoffset={-offset}
                 style={{ transformOrigin: 'center', transform: 'rotate(-90deg)' }}

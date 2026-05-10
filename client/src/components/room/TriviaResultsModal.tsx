@@ -77,7 +77,17 @@ export function TriviaResultsModal({
 
   const currentPlayer = finalScores.find((s) => s.playerId === currentUserId)
   const rank = currentPlayer?.rank ?? 1
-  const title = rank === 1 ? 'Victory!' : `Rank #${rank}`
+  // Solo runs only ever have one entry in `finalScores`. In that case the
+  // "Leaderboard" tab adds nothing, and "Victory!" framing is misleading
+  // because there's nobody to beat — so swap copy to match the solo context.
+  const isSolo = finalScores.length <= 1
+  const title = isSolo
+    ? correct > 0
+      ? 'Nice run!'
+      : 'Run complete'
+    : rank === 1
+      ? 'Victory!'
+      : `Rank #${rank}`
 
   const donutSegments = [
     { value: correct, color: 'var(--success-500)', label: 'Correct' },
@@ -151,7 +161,7 @@ export function TriviaResultsModal({
             </div>
 
             <div className="flex gap-1 border-b border-[var(--border)] px-8">
-              {(['overview', 'leaderboard'] as const).map((tab) => (
+              {(isSolo ? (['overview'] as const) : (['overview', 'leaderboard'] as const)).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -173,7 +183,7 @@ export function TriviaResultsModal({
             </div>
 
             <div className="px-8 py-6">
-              {activeTab === 'overview' ? (
+              {activeTab === 'overview' || isSolo ? (
                 <div className="space-y-6">
                   <div className="flex items-center gap-6">
                     <DonutChart
@@ -188,43 +198,61 @@ export function TriviaResultsModal({
                         { label: 'Correct', value: correct, color: 'var(--success-500)' },
                         { label: 'Wrong', value: wrong, color: 'var(--error-500)' },
                         { label: 'Unanswered', value: unanswered, color: 'var(--text-tertiary)' },
-                      ].map((stat) => (
-                        <div key={stat.label} className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="h-2.5 w-2.5 rounded-full" style={{ background: stat.color }} />
-                            <span className="text-sm text-[var(--text-secondary)]">{stat.label}</span>
+                      ]
+                        // Drop legend rows with zero count. The donut chart
+                        // already omits zero-value segments, so showing an
+                        // "Unanswered 0" line just adds noise.
+                        .filter((stat) => stat.value > 0)
+                        .map((stat) => (
+                          <div key={stat.label} className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="h-2.5 w-2.5 rounded-full"
+                                style={{ background: stat.color }}
+                              />
+                              <span className="text-sm text-[var(--text-secondary)]">{stat.label}</span>
+                            </div>
+                            <span className="font-mono text-sm font-semibold text-[var(--text-primary)]">
+                              {stat.value}
+                            </span>
                           </div>
-                          <span className="font-mono text-sm font-semibold text-[var(--text-primary)]">{stat.value}</span>
-                        </div>
-                      ))}
+                        ))}
                     </div>
                   </div>
 
                   {Object.keys(categoryBreakdown).length > 0 && (
-                    <div className="rounded-2xl border border-[var(--border)]/40 bg-[var(--surface)]/30 p-4">
-                      <p className="mb-3 text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
+                    <div>
+                      <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
                         By Category
                       </p>
-                      <div className="space-y-2.5">
+                      <div className="flex flex-wrap gap-1.5">
                         {Object.entries(categoryBreakdown).map(([cat, data]) => {
                           const pct = Math.round((data.correct / data.total) * 100)
+                          const tone =
+                            pct >= 67
+                              ? 'var(--success-500)'
+                              : pct >= 34
+                                ? 'var(--warning-500)'
+                                : 'var(--error-500)'
                           return (
-                            <div key={cat}>
-                              <div className="mb-1.5 flex items-center justify-between">
-                                <span className="text-xs font-medium text-[var(--text-primary)]">{cat}</span>
-                                <span className="text-xs font-mono text-[var(--text-secondary)]">
-                                  {data.correct}/{data.total}
-                                </span>
-                              </div>
-                              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--border)]/60">
-                                <motion.div
-                                  className="h-full rounded-full bg-[var(--game-trivia)]"
-                                  initial={{ width: 0 }}
-                                  animate={{ width: `${pct}%` }}
-                                  transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                                />
-                              </div>
-                            </div>
+                            <span
+                              key={cat}
+                              title={`${cat}: ${data.correct} of ${data.total} correct (${pct}%)`}
+                              className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium"
+                              style={{
+                                borderColor: `color-mix(in srgb, ${tone} 30%, transparent)`,
+                                background: `color-mix(in srgb, ${tone} 10%, transparent)`,
+                                color: 'var(--text-primary)',
+                              }}
+                            >
+                              <span>{cat}</span>
+                              <span
+                                className="font-mono text-[10px]"
+                                style={{ color: tone }}
+                              >
+                                {data.correct}/{data.total}
+                              </span>
+                            </span>
                           )
                         })}
                       </div>

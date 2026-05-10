@@ -232,3 +232,109 @@ test('TriviaRuntime uses the selected trivia categories list when starting round
   const cleanup = runtime as unknown as { clearTimers: () => void }
   cleanup.clearTimers()
 })
+
+test('TriviaRuntime spreads Mixed-mode rounds across multiple categories', async () => {
+  // Build a balanced "approved" pool with one easy question per concrete
+  // category so we can observe the category distribution the runtime picks
+  // across many rounds.
+  const categories: TriviaQuestionData['category'][] = [
+    'Movies & TV',
+    'Music',
+    'Sports',
+    'Gaming',
+    'Science & Nature',
+    'History & Culture',
+    'Geography & Travel',
+    'Internet & Tech',
+    'Food & Lifestyle',
+  ]
+
+  const pool: TriviaQuestionData[] = categories.flatMap((category, index) =>
+    Array.from({ length: 3 }).map((_, copy) => ({
+      id: `${category}-${index}-${copy}`,
+      hash: `${category}-${index}-${copy}`,
+      question: `Sample question ${copy + 1} for ${category}`,
+      answers: [
+        { id: 'a', text: 'A' },
+        { id: 'b', text: 'B' },
+        { id: 'c', text: 'C' },
+        { id: 'd', text: 'D' },
+      ],
+      correctId: 'a',
+      category,
+      difficulty: 'easy',
+      explanation: undefined,
+      tags: [],
+      source: 'database',
+    })),
+  )
+
+  const config: GameConfig = {
+    gameId: 'trivia',
+    roomCode: 'MIX123',
+    players: [
+      {
+        id: 'user-1',
+        name: 'Alpha',
+        isHost: true,
+        isConnected: true,
+        score: 0,
+      },
+    ],
+    settings: {
+      rounds: 9,
+      triviaCategories: ['Mixed'],
+      triviaDifficulty: 'easy',
+    },
+  }
+
+  const io = {
+    to: () => ({
+      emit: () => undefined,
+    }),
+  } as never
+
+  const roomService = {
+    applyGameResults: async () => undefined,
+  } as never
+
+  const runtime = new TestTriviaRuntime(io, config, roomService)
+  const mutableRuntime = runtime as unknown as { questionService: QuestionService }
+  mutableRuntime.questionService = new QuestionService(new MemoryTriviaRepository(pool))
+
+  await runtime.initialize()
+
+  // Collect categories for each round by repeatedly calling the private
+  // startNextRound helper and inspecting the ROUND_STARTED payload.
+  const startNextRound = (
+    runtime as unknown as {
+      startNextRound: () => Promise<GameEventResult>
+    }
+  ).startNextRound.bind(runtime)
+
+  const seenCategories = new Set<string>()
+  for (let round = 0; round < 9; round += 1) {
+    const result = await startNextRound()
+    const roundStarted = result.broadcast?.find(
+      (entry) => entry.event === TRIVIA_EVENTS.ROUND_STARTED,
+    )
+    if (!roundStarted) continue
+    const { category } = (
+      roundStarted.data as { question: { category: string } }
+    ).question
+    seenCategories.add(category)
+  }
+
+  // With 9 rounds pulling from a balanced 9-category pool, Mixed mode must
+  // produce more than one category. Anything less means we've regressed to
+  // clustering every question on the same category.
+  assert.ok(
+    seenCategories.size >= 3,
+    `expected Mixed mode to span multiple categories, got: ${Array.from(
+      seenCategories,
+    ).join(', ')}`,
+  )
+
+  const cleanup = runtime as unknown as { clearTimers: () => void }
+  cleanup.clearTimers()
+})

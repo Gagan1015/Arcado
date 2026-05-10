@@ -16,6 +16,7 @@ export type TriviaQuestionData = TriviaQuestion & {
 
 export type TriviaQuestionRequest = {
   category?: TriviaCategory
+  categoryCandidates?: TriviaCategory[]
   difficulty?: TriviaDifficulty
   region?: 'international' | 'india'
 }
@@ -102,31 +103,46 @@ export class QuestionService {
   }
 
   async getQuestion(options: TriviaQuestionRequest = {}): Promise<TriviaQuestionData> {
-    const category = options.category ?? DEFAULT_CATEGORY
+    const requestedCategory = options.category ?? DEFAULT_CATEGORY
     const difficulty = options.difficulty ?? DEFAULT_DIFFICULTY
     const region = options.region ?? DEFAULT_REGION
-    const excludeHashes = Array.from(this.usedQuestionHashes)
 
-    const databaseQuestion = await this.getDatabaseQuestion({
-      category,
-      difficulty,
-      region,
-      excludeHashes,
-    })
-    if (databaseQuestion) {
-      return databaseQuestion
-    }
+    // When a pool of candidate categories is provided (e.g. "Mixed" mode), try
+    // them in random order so every question comes from a different category
+    // instead of clustering on whichever category the database happens to
+    // return first for the pooled query.
+    const categoriesToTry = options.categoryCandidates?.length
+      ? shuffle(options.categoryCandidates)
+      : [requestedCategory]
 
-    if (excludeHashes.length > 0) {
-      this.reset()
-      const recycledQuestion = await this.getDatabaseQuestion({
+    let lastCategoryTried: TriviaCategory = requestedCategory
+    for (const category of categoriesToTry) {
+      lastCategoryTried = category
+      const excludeHashes = Array.from(this.usedQuestionHashes)
+      const databaseQuestion = await this.getDatabaseQuestion({
         category,
         difficulty,
         region,
-        excludeHashes: [],
+        excludeHashes,
       })
-      if (recycledQuestion) {
-        return recycledQuestion
+      if (databaseQuestion) {
+        return databaseQuestion
+      }
+    }
+
+    if (this.usedQuestionHashes.size > 0) {
+      this.reset()
+      for (const category of categoriesToTry) {
+        lastCategoryTried = category
+        const recycledQuestion = await this.getDatabaseQuestion({
+          category,
+          difficulty,
+          region,
+          excludeHashes: [],
+        })
+        if (recycledQuestion) {
+          return recycledQuestion
+        }
       }
     }
 
@@ -134,19 +150,22 @@ export class QuestionService {
     // category/difficulty combination, try the international pool so the
     // game keeps running instead of throwing mid-round.
     if (region !== DEFAULT_REGION) {
-      const internationalFallback = await this.getDatabaseQuestion({
-        category,
-        difficulty,
-        region: DEFAULT_REGION,
-        excludeHashes: Array.from(this.usedQuestionHashes),
-      })
-      if (internationalFallback) {
-        return internationalFallback
+      for (const category of categoriesToTry) {
+        lastCategoryTried = category
+        const internationalFallback = await this.getDatabaseQuestion({
+          category,
+          difficulty,
+          region: DEFAULT_REGION,
+          excludeHashes: Array.from(this.usedQuestionHashes),
+        })
+        if (internationalFallback) {
+          return internationalFallback
+        }
       }
     }
 
     throw new Error(
-      `No approved trivia questions found for category "${category}" and difficulty "${difficulty}".`
+      `No approved trivia questions found for category "${lastCategoryTried}" and difficulty "${difficulty}".`
     )
   }
 
@@ -222,4 +241,13 @@ function getQuestionFingerprint(question: string) {
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unknown error'
+}
+
+function shuffle<T>(items: readonly T[]): T[] {
+  const copy = items.slice()
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swapWith = Math.floor(Math.random() * (index + 1))
+    ;[copy[index], copy[swapWith]] = [copy[swapWith], copy[index]]
+  }
+  return copy
 }

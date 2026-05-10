@@ -1,5 +1,6 @@
 import {
   TRIVIA_EVENTS,
+  triviaCategories,
   type GameConfig,
   type GameEventResult,
   type GameResultData,
@@ -301,8 +302,10 @@ export class TriviaRuntime extends BaseGameRuntime {
 
     this.phase = 'playing'
     this.answers.clear()
+    const { category, categoryCandidates } = resolveTriviaCategorySelection(this.categories)
     this.currentQuestion = await this.questionService.getQuestion({
-      category: pickTriviaCategory(this.categories),
+      category,
+      categoryCandidates,
       difficulty: this.difficulty,
       region: this.region,
     })
@@ -537,11 +540,52 @@ function normalizeTriviaCategories(categories: TriviaCategory[]) {
   return uniqueCategories
 }
 
+const CONCRETE_TRIVIA_CATEGORIES = triviaCategories.filter(
+  (category): category is Exclude<TriviaCategory, 'Mixed'> => category !== 'Mixed'
+)
+
 function pickTriviaCategory(categories: TriviaCategory[]) {
-  if (categories.length <= 1) {
-    return categories[0] ?? 'Mixed'
+  // When the host picked "Mixed" we want every question to come from a
+  // different random concrete category instead of letting the database
+  // ORDER BY cluster every round on whichever category currently has the
+  // least-used rows.
+  const pool =
+    categories.length === 0 || categories.includes('Mixed')
+      ? CONCRETE_TRIVIA_CATEGORIES
+      : categories
+
+  if (pool.length === 0) {
+    return 'Mixed'
   }
 
-  const index = Math.floor(Math.random() * categories.length)
-  return categories[index] ?? 'Mixed'
+  if (pool.length === 1) {
+    return pool[0]
+  }
+
+  const index = Math.floor(Math.random() * pool.length)
+  return pool[index] ?? pool[0]
+}
+
+function resolveTriviaCategorySelection(categories: TriviaCategory[]): {
+  category: TriviaCategory
+  categoryCandidates: TriviaCategory[]
+} {
+  // If the host picked "Mixed", or a multi-category list, we expand that into
+  // a pool of concrete categories and let QuestionService try them in random
+  // order. That guarantees each round pulls from a different category instead
+  // of clustering on whichever category the database returns first.
+  const pool =
+    categories.length === 0 || categories.includes('Mixed')
+      ? CONCRETE_TRIVIA_CATEGORIES
+      : categories
+
+  // The `category` field becomes the fallback if QuestionService receives no
+  // candidate list. We pre-pick one randomly from the same pool so behaviour
+  // is consistent regardless of which code path the service ends up using.
+  const primary = pickTriviaCategory(categories)
+
+  return {
+    category: primary,
+    categoryCandidates: pool.length > 0 ? [...pool] : [primary],
+  }
 }

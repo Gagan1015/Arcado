@@ -140,7 +140,14 @@ foreach ($k in $env.Keys) {
   $lines += "$k=$v"
 }
 
-$lines | Set-Content -Path $OutFile -Encoding UTF8
+$lines | Out-File -FilePath $OutFile -Encoding utf8NoBOM -Force 2>$null
+if (-not (Test-Path $OutFile)) {
+  # utf8NoBOM is PS 6+; fall back for Windows PowerShell 5.
+  [System.IO.File]::WriteAllLines(
+    (Resolve-Path -LiteralPath (Split-Path $OutFile -Parent) | ForEach-Object Path) + "\" + (Split-Path $OutFile -Leaf),
+    $lines,
+    (New-Object System.Text.UTF8Encoding $false))
+}
 Info "Wrote $OutFile"
 
 # ─── sanity report ──────────────────────────────────────────────────────────

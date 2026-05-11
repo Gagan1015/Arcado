@@ -113,12 +113,13 @@ The workspace starts the shared package build and then runs the client and serve
 
 ## Deployment
 
-Arcado includes a full AWS path for ECS Fargate, RDS PostgreSQL, an Application Load Balancer, Secrets Manager, and ECR images.
+Arcado runs on a single EC2 box with Docker Compose + Caddy, backed by RDS
+PostgreSQL. Every push to `main` deploys automatically via GitHub Actions.
 
-Start with the deployment guide:
+Start here:
 
 ```text
-deploy/README.md
+deploy/ec2/README.md
 ```
 
 ## Brand

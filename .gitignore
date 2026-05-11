@@ -13,11 +13,9 @@ out
 .env
 .env.local
 .env.*.local
-.env.deploy
 .env.prod
-arcado-ec2.pem
+*.pem
 !.env.example
-!.env.deploy.example
 !.env.prod.example
 
 # Logs

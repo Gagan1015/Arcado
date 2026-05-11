@@ -1,0 +1,31 @@
+# Arcado production Caddyfile.
+# Caddy automatically obtains + renews Let's Encrypt certs for both hostnames.
+# Both A records must point at the EC2 Elastic IP BEFORE the first boot or the
+# ACME HTTP-01 challenge will fail (Caddy retries, but expect ~1 minute).
+#
+# reverse_proxy already upgrades WebSocket connections (Socket.IO) transparently.
+
+{
+	email admin@gagankumar.me
+	# Uncomment the next line to test with the Let's Encrypt staging CA
+	# (avoids rate limits while you're iterating):
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+arcado.gagankumar.me {
+	encode zstd gzip
+	reverse_proxy client:3000 {
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
+
+api.arcado.gagankumar.me {
+	encode zstd gzip
+	reverse_proxy server:3001 {
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}

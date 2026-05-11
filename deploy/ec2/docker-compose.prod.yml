@@ -1,0 +1,97 @@
+# Production compose file for a single EC2 box running Caddy + client + server.
+# Run from the repository root with:
+#
+#   docker compose -f deploy/ec2/docker-compose.prod.yml \
+#                  --env-file /srv/arcado/.env.prod \
+#                  up -d --build
+#
+# All inbound traffic enters through Caddy (80/443). The app containers are
+# only reachable on the internal `arcado` network — they never bind to host
+# ports directly, so the EC2 security group only needs 22/80/443 open.
+
+services:
+  client:
+    build:
+      context: ../..
+      dockerfile: client/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
+    image: arcado-client:latest
+    container_name: arcado-client
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: ${DATABASE_URL}
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      ADMIN_EMAILS: ${ADMIN_EMAILS}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+    expose:
+      - "3000"
+    networks:
+      - arcado
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  server:
+    build:
+      context: ../..
+      dockerfile: server/Dockerfile
+    image: arcado-server:latest
+    container_name: arcado-server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: ${DATABASE_URL}
+      CLIENT_URL: ${CLIENT_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_EMAILS: ${ADMIN_EMAILS}
+    expose:
+      - "3001"
+    networks:
+      - arcado
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: arcado-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - client
+      - server
+    networks:
+      - arcado
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  arcado:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

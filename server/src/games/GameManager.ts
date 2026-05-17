@@ -223,7 +223,7 @@ export class GameManager {
                 roomCode: room.code,
                 players: room.players,
                 settings: {
-                  rounds: configuredSettings.rounds ?? room.players.length,
+                  rounds: configuredSettings.rounds,
                   roundTime: configuredSettings.roundTime,
                   maxPlayers: room.maxPlayers,
                 },

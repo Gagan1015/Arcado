@@ -767,7 +767,13 @@ export function Header({ variant = 'default' }: HeaderProps) {
               </div>
 
               <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
-                {navItems.length > 0 && (
+                {/* Explore section is hidden on the mobile sidebar when
+                    we're already on the landing page itself — the same
+                    links live in the page (Games / How it works) and the
+                    Lobby is reachable from the Pages section below, so
+                    showing both creates redundant noise on a small
+                    screen. Desktop and inner pages still get it. */}
+                {navItems.length > 0 && !isLandingPage && (
                   <div className="space-y-1">
                     <p className="px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
                       Explore

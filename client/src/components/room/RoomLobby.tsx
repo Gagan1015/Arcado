@@ -363,6 +363,7 @@ export function RoomLobby({
             strokes={skribble.strokes}
             correctGuessers={skribble.correctGuessers}
             roundEndsAt={skribble.roundEndsAt}
+            choosingEndsAt={skribble.choosingEndsAt}
             scores={skribble.scores}
             guessResult={skribble.guessResult}
             messages={skribble.messages}

@@ -34,9 +34,27 @@ class TestSkribbleRuntime extends SkribbleRuntime {
     mutableThis.roundState.word = word
     mutableThis.roundState.wordHint = `${word.charAt(0).toUpperCase()} _`
   }
+
+  async startNextRoundForTest(): Promise<GameEventResult> {
+    const mutableThis = this as unknown as {
+      startNextRound(): Promise<GameEventResult>
+    }
+    return mutableThis.startNextRound()
+  }
+
+  async finishRoundForTest(): Promise<GameEventResult> {
+    const mutableThis = this as unknown as {
+      finishRound(selfDispatch?: boolean): Promise<GameEventResult>
+    }
+    return mutableThis.finishRound(false)
+  }
+
+  getUsedWordsForTest(): Set<string> {
+    return (this as unknown as { usedWords: Set<string> }).usedWords
+  }
 }
 
-function createRuntime() {
+function createRuntime(roundsPerPlayer = 1) {
   const config: GameConfig = {
     gameId: 'skribble',
     roomCode: 'ABC123',
@@ -64,7 +82,7 @@ function createRuntime() {
       },
     ],
     settings: {
-      rounds: 1,
+      rounds: roundsPerPlayer,
     },
   }
 
@@ -184,4 +202,45 @@ test('SkribbleRuntime emits game ended payload', async () => {
   const result = await runtime.end()
   const gameEnded = result.broadcast?.find((entry) => entry.event === SKRIBBLE_EVENTS.GAME_ENDED)
   assert.ok(gameEnded)
+})
+
+test('SkribbleRuntime never offers the same word in two different rounds', async () => {
+  const ROUNDS = 9
+  const runtime = createRuntime(ROUNDS)
+  await runtime.initialize()
+
+  const seen = new Set<string>()
+
+  for (let round = 0; round < ROUNDS; round += 1) {
+    const result = round === 0 ? await runtime.start() : await runtime.startNextRoundForTest()
+
+    const choicesEvent = result.broadcast?.find(
+      (entry) => entry.event === SKRIBBLE_EVENTS.WORD_CHOICES
+    )
+    assert.ok(choicesEvent, `Round ${round + 1} did not emit WORD_CHOICES`)
+
+    const offered = (choicesEvent.data as { words: string[] }).words
+    assert.equal(offered.length, 3, `Round ${round + 1} did not offer 3 words`)
+
+    for (const word of offered) {
+      const key = word.toLowerCase()
+      assert.equal(
+        seen.has(key),
+        false,
+        `Round ${round + 1} re-offered "${word}" (already shown earlier)`
+      )
+      seen.add(key)
+    }
+
+    // Pick the first option, draw briefly, then close out the round so we
+    // can advance the runtime to the next round picker.
+    const drawerId = (choicesEvent.data as { drawerId: string }).drawerId
+    await runtime.onClientEvent(drawerId, SKRIBBLE_EVENTS.CHOOSE_WORD, {
+      roomCode: 'ABC123',
+      word: offered[0],
+    })
+    await runtime.finishRoundForTest()
+  }
+
+  assert.equal(seen.size, ROUNDS * 3, 'Expected every offered word to be unique')
 })

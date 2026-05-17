@@ -196,6 +196,7 @@ export const drawWordChoosingStartedSchema = z.object({
   roundNumber: z.number().int().min(1),
   totalRounds: z.number().int().min(1),
   drawerId: userIdSchema,
+  choosingEndsAt: isoDateTimeSchema.optional(),
 })
 
 export const drawWordChoicesSchema = drawWordChoosingStartedSchema.extend({
@@ -226,6 +227,7 @@ export const drawSyncSchema = z.object({
   word: z.string().optional(),
   isChoosing: z.boolean().optional(),
   wordChoices: z.array(z.string().min(1)).optional(),
+  choosingEndsAt: isoDateTimeSchema.optional(),
 })
 
 export const drawRoundEndedSchema = z.object({

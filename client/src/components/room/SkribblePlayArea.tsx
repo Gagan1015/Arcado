@@ -29,6 +29,7 @@ type SkribblePlayAreaProps = {
   strokes: Stroke[]
   correctGuessers: string[]
   roundEndsAt: string | null
+  choosingEndsAt: string | null
   scores: Record<string, number>
   guessResult: SkribbleGuessResult | null
   messages: ChatMessage[]
@@ -227,13 +228,45 @@ function DrawingCanvas({
   )
 }
 
-/* â”€â”€ Timer â”€â”€ */
+/* ── useIsMobile ──
+   Tracks whether the viewport is at or below the mobile breakpoint (768px),
+   matching the responsive grid breakpoint used by the play area. We need
+   this in JS, not just CSS, because the word picker swaps between an
+   on-canvas overlay (desktop) and an in-flow card above the canvas
+   (mobile) — different markup, not just different styling. Starts at
+   `false` to keep SSR markup identical to the desktop server render. */
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(false)
 
-function RoundTimer({ roundEndsAt }: { roundEndsAt: string | null }) {
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const query = window.matchMedia(`(max-width: ${breakpoint}px)`)
+    const update = () => setIsMobile(query.matches)
+    update()
+
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [breakpoint])
+
+  return isMobile
+}
+
+/* ── Inline Timer ──
+   Compact pill suitable for tight headers (e.g. the chat sidebar). Picks the
+   colour automatically from the active phase: green during play (turns red
+   in the last 15s) and pink during the word-choosing phase. */
+function InlineTimer({
+  endsAt,
+  variant,
+}: {
+  endsAt: string | null
+  variant: 'play' | 'choose' | 'idle'
+}) {
   const [secondsLeft, setSecondsLeft] = useState(0)
 
   useEffect(() => {
-    if (!roundEndsAt) {
+    if (!endsAt) {
       setSecondsLeft(0)
       return
     }
@@ -241,7 +274,7 @@ function RoundTimer({ roundEndsAt }: { roundEndsAt: string | null }) {
     const update = () => {
       const remaining = Math.max(
         0,
-        Math.ceil((new Date(roundEndsAt).getTime() - Date.now()) / 1000)
+        Math.ceil((new Date(endsAt).getTime() - Date.now()) / 1000)
       )
       setSecondsLeft(remaining)
     }
@@ -249,46 +282,53 @@ function RoundTimer({ roundEndsAt }: { roundEndsAt: string | null }) {
     update()
     const interval = setInterval(update, 1000)
     return () => clearInterval(interval)
-  }, [roundEndsAt])
+  }, [endsAt])
 
-  const isLow = secondsLeft <= 15
-  const color = isLow ? '#EF4444' : '#22C55E'
+  const isLow = variant === 'play' && secondsLeft <= 15 && secondsLeft > 0
+  const color =
+    variant === 'idle'
+      ? 'var(--text-tertiary)'
+      : variant === 'choose'
+        ? 'var(--game-skribble)'
+        : isLow
+          ? '#EF4444'
+          : '#22C55E'
 
   return (
     <motion.div
-      animate={isLow ? { scale: [1, 1.05, 1] } : {}}
+      animate={isLow ? { scale: [1, 1.06, 1] } : {}}
       transition={isLow ? { repeat: Infinity, duration: 1 } : {}}
       style={{
-        display: 'flex',
+        display: 'inline-flex',
         alignItems: 'center',
-        gap: '8px',
-        padding: '8px 16px',
-        borderRadius: '12px',
+        gap: '6px',
+        padding: '4px 10px',
+        borderRadius: '999px',
         border: `1px solid ${color}33`,
         background: `${color}10`,
       }}
     >
-      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2">
+      <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2">
         <circle cx="12" cy="12" r="10" />
         <polyline points="12 6 12 12 16 14" />
       </svg>
       <span
         style={{
-          fontSize: '1.1rem',
+          fontSize: '0.78rem',
           fontWeight: 700,
           fontFamily: 'var(--font-mono)',
           color,
-          minWidth: '32px',
+          minWidth: '22px',
           textAlign: 'center',
         }}
       >
-        {secondsLeft}s
+        {variant === 'idle' ? '—' : `${secondsLeft}s`}
       </span>
     </motion.div>
   )
 }
 
-/* â”€â”€ SVG Icons â”€â”€ */
+/* ── SVG Icons ── */
 
 function IconBrush({ size = 16 }: { size?: number }) {
   return (
@@ -387,6 +427,60 @@ function IconMedal({ size = 16, rank }: { size?: number; rank: number }) {
   )
 }
 
+/* ── Sparkles ──
+   Decorative, non-interactive sparkle motif used as the backdrop of the
+   game-end card so the celebratory state has personality even after the
+   canvas + chat are hidden. Pure SVG/CSS so we don't pull in a dep just
+   for one screen, and fully positioned absolutely so it never affects
+   layout. */
+function Sparkles() {
+  const dots = [
+    { left: '8%', top: '18%', size: 6, delay: 0 },
+    { left: '92%', top: '22%', size: 8, delay: 0.6 },
+    { left: '14%', top: '78%', size: 5, delay: 1.1 },
+    { left: '82%', top: '70%', size: 7, delay: 0.3 },
+    { left: '50%', top: '8%', size: 4, delay: 0.9 },
+    { left: '30%', top: '52%', size: 4, delay: 1.4 },
+    { left: '70%', top: '46%', size: 5, delay: 0.2 },
+  ]
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: 'absolute',
+        inset: 0,
+        pointerEvents: 'none',
+        overflow: 'hidden',
+      }}
+    >
+      {dots.map((dot, idx) => (
+        <motion.div
+          key={idx}
+          initial={{ opacity: 0, scale: 0.6 }}
+          animate={{ opacity: [0, 1, 0], scale: [0.6, 1.1, 0.6] }}
+          transition={{
+            repeat: Infinity,
+            duration: 2.6,
+            delay: dot.delay,
+            ease: 'easeInOut',
+          }}
+          style={{
+            position: 'absolute',
+            left: dot.left,
+            top: dot.top,
+            width: dot.size,
+            height: dot.size,
+            borderRadius: '50%',
+            background:
+              'radial-gradient(circle, rgba(236,72,153,0.9), rgba(236,72,153,0))',
+            filter: 'blur(0.4px)',
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
 
 export function SkribblePlayArea({
   currentUserId,
@@ -403,6 +497,7 @@ export function SkribblePlayArea({
   strokes,
   correctGuessers,
   roundEndsAt,
+  choosingEndsAt,
   scores,
   guessResult,
   messages,
@@ -422,10 +517,40 @@ export function SkribblePlayArea({
   >([])
   const chatEndRef = useRef<HTMLDivElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
   const isNearBottomRef = useRef(true)
   const hasGuessedCorrectly = correctGuessers.includes(currentUserId)
 
   const drawerPlayer = players.find((p) => p.id === drawerId)
+  const isMobile = useIsMobile()
+
+  // When the play area first mounts (the game has just started), the user
+  // might be scrolled down to the players list / room controls below. Pull
+  // the play area into view smoothly so the canvas isn't half-cut by the
+  // sticky header. Only fires once on mount; later scroll behaviour is up
+  // to the user.
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root) return
+
+    // Allow layout to settle (overlay + canvas) before we measure.
+    const id = requestAnimationFrame(() => {
+      // Sticky header is taller on desktop than on mobile; leave a little
+      // breathing room either way so the play area doesn't sit flush
+      // against the header bottom edge.
+      const headerOffset = window.innerWidth < 768 ? 72 : 96
+      const rect = root.getBoundingClientRect()
+      const target = rect.top + window.scrollY - headerOffset
+
+      // Only scroll up if the play area is currently below the viewport
+      // top; never scroll down past the play area.
+      if (rect.top > headerOffset + 8) {
+        window.scrollTo({ top: target, behavior: 'smooth' })
+      }
+    })
+
+    return () => cancelAnimationFrame(id)
+  }, [])
 
   // Track whether the user has scrolled near the bottom of chat
   const handleChatScroll = useCallback(() => {
@@ -436,13 +561,15 @@ export function SkribblePlayArea({
       container.scrollHeight - container.scrollTop - container.clientHeight < threshold
   }, [])
 
-  // Smart scroll: only auto-scroll when user is near the bottom
+  // Smart scroll: only auto-scroll the chat container itself when the user is
+  // near the bottom. Using `scrollIntoView` on a child also scrolls every
+  // scrollable ancestor (including the page), which causes the play area to
+  // jump on every new message. Setting `scrollTop` keeps it contained.
   useLayoutEffect(() => {
     if (!isNearBottomRef.current) return
-    const el = chatEndRef.current
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'end' })
-    }
+    const container = chatContainerRef.current
+    if (!container) return
+    container.scrollTop = container.scrollHeight
   }, [localMessages])
 
   // Handle incoming guess results
@@ -539,8 +666,217 @@ export function SkribblePlayArea({
     (a, b) => (scores[b.id] ?? 0) - (scores[a.id] ?? 0)
   )
 
+  /* ── Picker body ──
+     Shared between the desktop overlay and the mobile in-flow card so the
+     content is identical regardless of presentation. The drawer sees a
+     responsive grid of word cards (3 cols on desktop, stacked on mobile);
+     non-drawers see a passive "X is picking" status. */
+  const renderPickerContent = () => {
+    if (isDrawer) {
+      return (
+        <div
+          style={{
+            width: '100%',
+            maxWidth: '640px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: isMobile ? '14px' : '20px',
+          }}
+        >
+          <div style={{ textAlign: 'center' }}>
+            <p
+              style={{
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                letterSpacing: '0.22em',
+                textTransform: 'uppercase',
+                color: 'var(--game-skribble)',
+                marginBottom: '6px',
+              }}
+            >
+              Your turn to draw
+            </p>
+            <h2
+              style={{
+                fontSize: isMobile ? '1.25rem' : '1.6rem',
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+              }}
+            >
+              Choose a word
+            </h2>
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile
+                ? '1fr'
+                : `repeat(${Math.min(wordChoices.length || 1, 3)}, minmax(0, 1fr))`,
+              gap: isMobile ? '8px' : '12px',
+              width: '100%',
+            }}
+          >
+            {wordChoices.map((choice, idx) => (
+              <motion.button
+                key={choice}
+                type="button"
+                onClick={() => onChooseWord(choice)}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.08 + idx * 0.06, duration: 0.18 }}
+                whileHover={{ y: -2, scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                style={{
+                  padding: isMobile ? '14px 16px' : '20px 16px',
+                  borderRadius: '14px',
+                  border: '1px solid rgba(236,72,153,0.32)',
+                  background:
+                    'linear-gradient(180deg, rgba(236,72,153,0.16), rgba(236,72,153,0.08))',
+                  color: 'var(--text-primary)',
+                  fontSize: isMobile ? '1rem' : '1.05rem',
+                  fontWeight: 700,
+                  textTransform: 'capitalize',
+                  cursor: 'pointer',
+                  boxShadow:
+                    '0 6px 20px -10px rgba(236,72,153,0.4), inset 0 0 0 1px rgba(255,255,255,0.04)',
+                }}
+              >
+                {choice}
+              </motion.button>
+            ))}
+          </div>
+          <p
+            style={{
+              fontSize: '0.78rem',
+              color: 'var(--text-tertiary)',
+              marginTop: '4px',
+            }}
+          >
+            Auto-pick when the timer hits zero
+          </p>
+        </div>
+      )
+    }
+
+    return (
+      <div style={{ textAlign: 'center' }}>
+        <motion.div
+          animate={{ opacity: [0.5, 1, 0.5] }}
+          transition={{ repeat: Infinity, duration: 1.6, ease: 'easeInOut' }}
+          style={{
+            width: isMobile ? '44px' : '52px',
+            height: isMobile ? '44px' : '52px',
+            borderRadius: '50%',
+            margin: isMobile ? '0 auto 10px' : '0 auto 14px',
+            background:
+              'radial-gradient(circle, rgba(236,72,153,0.35), rgba(236,72,153,0.05))',
+            border: '1px solid rgba(236,72,153,0.32)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--game-skribble)',
+          }}
+        >
+          <IconPalette size={isMobile ? 18 : 22} color="var(--game-skribble)" />
+        </motion.div>
+        <p
+          style={{
+            fontSize: '0.7rem',
+            fontWeight: 700,
+            letterSpacing: '0.22em',
+            textTransform: 'uppercase',
+            color: 'var(--game-skribble)',
+            marginBottom: '6px',
+          }}
+        >
+          Get ready
+        </p>
+        <h2
+          style={{
+            fontSize: isMobile ? '1.05rem' : '1.4rem',
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+          }}
+        >
+          {drawerPlayer?.name ?? 'The drawer'} is picking a word…
+        </h2>
+        <p
+          style={{
+            marginTop: '10px',
+            fontSize: '0.85rem',
+            color: 'var(--text-secondary)',
+          }}
+        >
+          Stretch your guessing fingers.
+        </p>
+      </div>
+    )
+  }
+
+  /* ── Round-end body ──
+     Same dual rendering: glass overlay on desktop, in-flow card on mobile. */
+  const renderRoundEndContent = () => (
+    <div
+      style={{
+        width: '100%',
+        maxWidth: '520px',
+        textAlign: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '14px',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <IconSparkles size={14} color="var(--game-skribble)" />
+        <span style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.22em', color: 'var(--game-skribble)' }}>
+          Round Over
+        </span>
+      </div>
+      <p
+        style={{
+          fontSize: isMobile ? '1.1rem' : '1.4rem',
+          fontWeight: 700,
+          fontFamily: 'var(--font-mono)',
+          letterSpacing: isMobile ? '0.08em' : '0.18em',
+          color: 'var(--text-primary)',
+        }}
+      >
+        The word was{' '}
+        <span style={{ color: 'var(--game-skribble)' }}>{roundEndWord?.toUpperCase()}</span>
+      </p>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        {sortedPlayers.slice(0, 3).map((p, i) => (
+          <div
+            key={p.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 12px',
+              borderRadius: '8px',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            <IconMedal size={14} rank={i + 1} />
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--success-500)' }}>
+              {scores[p.id] ?? 0}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>
+        Round {currentRound}/{totalRounds} {'\u00B7'} Next round starting soon{'\u2026'}
+      </p>
+    </div>
+  )
+
   return (
     <div
+      ref={rootRef}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -579,150 +915,263 @@ export function SkribblePlayArea({
             <span
               style={{
                 padding: '5px 14px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 600,
-                background: isDrawer ? 'rgba(236,72,153,0.1)' : 'rgba(59,130,246,0.1)',
-                color: isDrawer ? 'var(--game-skribble)' : 'var(--primary-500)',
-                border: `1px solid ${isDrawer ? 'rgba(236,72,153,0.18)' : 'rgba(59,130,246,0.18)'}`,
+                background:
+                  phase === 'gameEnd'
+                    ? 'rgba(148,163,184,0.1)'
+                    : isDrawer
+                      ? 'rgba(236,72,153,0.1)'
+                      : 'rgba(59,130,246,0.1)',
+                color:
+                  phase === 'gameEnd'
+                    ? 'var(--text-secondary)'
+                    : isDrawer
+                      ? 'var(--game-skribble)'
+                      : 'var(--primary-500)',
+                border: `1px solid ${
+                  phase === 'gameEnd'
+                    ? 'rgba(148,163,184,0.2)'
+                    : isDrawer
+                      ? 'rgba(236,72,153,0.18)'
+                      : 'rgba(59,130,246,0.18)'
+                }`,
               }}
             >
-              {phase === 'choosing'
-                ? isDrawer ? 'Pick your word' : `${drawerPlayer?.name ?? 'Someone'} is choosing`
-                : isDrawer ? 'You are drawing!' : `${drawerPlayer?.name ?? 'Someone'} is drawing`}
+              {phase === 'gameEnd'
+                ? 'Game complete'
+                : phase === 'choosing'
+                  ? isDrawer ? 'Pick your word' : `${drawerPlayer?.name ?? 'Someone'} is choosing`
+                  : isDrawer ? 'You are drawing!' : `${drawerPlayer?.name ?? 'Someone'} is drawing`}
             </span>
           </div>
-          {/* Timer */}
-          {phase === 'playing' && <RoundTimer roundEndsAt={roundEndsAt} />}
         </div>
-        {/* Progress bar */}
+        {/* Progress bar — switches to a calm success-green when the game
+            has ended so the pink "in progress" gradient doesn't suggest
+            something is still happening. */}
         <div style={{ height: '3px', borderRadius: '2px', background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${totalRounds > 0 ? (currentRound / totalRounds) * 100 : 0}%` }}
             transition={{ type: 'spring', stiffness: 200, damping: 30 }}
-            style={{ height: '100%', borderRadius: '2px', background: 'linear-gradient(90deg, var(--game-skribble), #a855f7)' }}
+            style={{
+              height: '100%',
+              borderRadius: '2px',
+              background:
+                phase === 'gameEnd'
+                  ? 'linear-gradient(90deg, var(--success-500), #34d399)'
+                  : 'linear-gradient(90deg, var(--game-skribble), #a855f7)',
+              transition: 'background 0.3s ease',
+            }}
           />
         </div>
       </motion.div>
 
-      {/* ── Word choice ── */}
-      {phase === 'choosing' && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
+      {/* ── Main game area ──
+          The canvas zone is always present during play / round end. During
+          the choosing phase the word picker is rendered as an overlay *on
+          top* of the canvas, so we never push the rest of the page around.
+          The slim word strip along the top of the canvas shows the masked
+          word/hint while playing (drawer sees the actual word), keeping
+          the round-info header free of state-dependent text.
+          When the game has ended we replace this whole block with the
+          celebratory scoreboard further down — a blank canvas + empty
+          chat post-game looks abandoned. */}
+      {phase !== 'gameEnd' && (
+        <div
           style={{
-            padding: '18px',
-            borderRadius: '14px',
-            background: isDrawer ? 'rgba(236,72,153,0.08)' : 'rgba(255,255,255,0.03)',
-            border: isDrawer ? '1px solid rgba(236,72,153,0.22)' : '1px solid rgba(255,255,255,0.06)',
+            display: 'grid',
+            gridTemplateColumns: '1fr 320px',
+            gap: '16px',
+            minHeight: '500px',
           }}
+          className="skribble-layout"
         >
-          {isDrawer ? (
-            <>
-              <p
-                style={{
-                  marginBottom: '12px',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  letterSpacing: '0.18em',
-                  textTransform: 'uppercase',
-                  color: 'var(--game-skribble)',
-                }}
-              >
-                Choose a word to draw
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                {wordChoices.map((choice) => (
-                  <button
-                    key={choice}
-                    type="button"
-                    onClick={() => onChooseWord(choice)}
-                    style={{
-                      flex: '1 1 140px',
-                      padding: '12px 14px',
-                      borderRadius: '8px',
-                      border: '1px solid rgba(236,72,153,0.35)',
-                      background: 'rgba(236,72,153,0.14)',
-                      color: 'var(--text-primary)',
-                      fontSize: '0.95rem',
-                      fontWeight: 700,
-                      textTransform: 'capitalize',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {choice}
-                  </button>
-                ))}
-              </div>
-            </>
-          ) : (
-            <p
-              style={{
-                textAlign: 'center',
-                fontSize: '0.95rem',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              {drawerPlayer?.name ?? 'The drawer'} is choosing a word.
-            </p>
-          )}
-        </motion.div>
-      )}
-
-      {/* ── Word display ── */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        style={{
-          textAlign: 'center',
-          padding: '12px 24px',
-          borderRadius: '12px',
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.06)',
-        }}
-      >
-        <span
-          style={{
-            fontSize: '1.5rem',
-            fontWeight: 700,
-            fontFamily: 'var(--font-mono)',
-            letterSpacing: phase === 'choosing' ? '0.08em' : '0.35em',
-            color: isDrawer ? 'var(--game-skribble)' : 'var(--text-primary)',
-          }}
-        >
-          {wordDisplay}
-        </span>
-        {phase !== 'choosing' && wordLength > 0 && (
-          <span
-            style={{
-              marginLeft: '16px',
-              fontSize: '0.75rem',
-              color: 'var(--text-tertiary)',
-            }}
-          >
-            ({wordLength} letters)
-          </span>
-        )}
-      </motion.div>
-
-      {/* ── Main game area ── */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 320px',
-          gap: '16px',
-          minHeight: '500px',
-        }}
-        className="skribble-layout"
-      >
         {/* ── Left: Canvas + Drawing tools ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <DrawingCanvas
-            strokes={strokes}
-            isDrawer={isDrawer && phase === 'playing'}
-            onSendStrokes={onSendStrokes}
-            brushColor={brushColor}
-            brushWidth={brushWidth}
-            tool={tool}
-          />
+          {/* Mobile-only in-flow word picker. On a narrow screen, stacking
+              the picker above the canvas gives full-width tap targets and
+              avoids cramming the picker over a tiny drawing surface. The
+              same content reuses `renderPickerContent`, so this is purely
+              a presentation switch. */}
+          <AnimatePresence>
+            {isMobile && phase === 'choosing' && (
+              <motion.div
+                key="word-picker-mobile-card"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.18 }}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  padding: '18px 16px',
+                  borderRadius: '16px',
+                  background:
+                    'linear-gradient(135deg, rgba(236,72,153,0.08), rgba(168,85,247,0.04))',
+                  border: '1px solid rgba(236,72,153,0.22)',
+                  boxShadow: '0 6px 24px -16px rgba(236,72,153,0.5)',
+                }}
+              >
+                {renderPickerContent()}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Mobile-only in-flow round-end recap, same reasoning. */}
+          <AnimatePresence>
+            {isMobile && phase === 'roundEnd' && roundEndWord && (
+              <motion.div
+                key="round-end-mobile-card"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.18 }}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  padding: '18px 16px',
+                  borderRadius: '16px',
+                  background:
+                    'linear-gradient(135deg, rgba(236,72,153,0.06), rgba(168,85,247,0.03))',
+                  border: '1px solid rgba(236,72,153,0.18)',
+                }}
+              >
+                {renderRoundEndContent()}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div style={{ position: 'relative' }}>
+            {/* Word strip — shows during play; for choosing we let the
+                overlay take focus. Sized to roughly mirror the strip's
+                footprint so the canvas stays in place. Font sizing tightens
+                on mobile so a 5-letter word doesn't wrap to two lines on
+                a 320-px screen. */}
+            <div
+              style={{
+                position: 'absolute',
+                top: isMobile ? '8px' : '14px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 2,
+                pointerEvents: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: isMobile ? '8px' : '12px',
+                padding: isMobile ? '6px 12px' : '8px 18px',
+                borderRadius: '999px',
+                background: 'rgba(11,14,20,0.78)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                backdropFilter: 'blur(6px)',
+                opacity: phase === 'playing' ? 1 : 0,
+                transition: 'opacity 0.18s ease',
+                maxWidth: 'calc(100% - 24px)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: isMobile ? '0.85rem' : '1.05rem',
+                  fontWeight: 700,
+                  fontFamily: 'var(--font-mono)',
+                  letterSpacing: isMobile ? '0.18em' : '0.32em',
+                  color: isDrawer ? 'var(--game-skribble)' : 'var(--text-primary)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {wordDisplay}
+              </span>
+              {wordLength > 0 && (
+                <span
+                  style={{
+                    fontSize: isMobile ? '0.62rem' : '0.7rem',
+                    color: 'var(--text-tertiary)',
+                    fontFamily: 'var(--font-mono)',
+                    flexShrink: 0,
+                  }}
+                >
+                  ({wordLength}{isMobile ? 'L' : ' letters'})
+                </span>
+              )}
+            </div>
+
+            <DrawingCanvas
+              strokes={strokes}
+              isDrawer={isDrawer && phase === 'playing'}
+              onSendStrokes={onSendStrokes}
+              brushColor={brushColor}
+              brushWidth={brushWidth}
+              tool={tool}
+            />
+
+            {/* Word picker overlay — sits on top of the canvas during the
+                choosing phase. Renders different content for the drawer
+                (3 word cards) vs the rest of the room (a passive status
+                pane), but both share the same surface so phase changes
+                feel like a card flip rather than a layout reflow.
+                Desktop only — on mobile, the same content is rendered as
+                an in-flow card above the canvas to keep tap targets
+                comfortable. */}
+            <AnimatePresence>
+              {phase === 'choosing' && !isMobile && (
+                <motion.div
+                  key="word-picker-overlay"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.16 }}
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '24px',
+                    borderRadius: '18px',
+                    background:
+                      'linear-gradient(135deg, rgba(11,14,20,0.86), rgba(11,14,20,0.92))',
+                    backdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(236,72,153,0.18)',
+                    zIndex: 3,
+                  }}
+                >
+                  {renderPickerContent()}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Round-end overlay — desktop only, same reasoning as the
+                picker overlay above. */}
+            <AnimatePresence>
+              {phase === 'roundEnd' && roundEndWord && !isMobile && (
+                <motion.div
+                  key="round-end-overlay"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.16 }}
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '24px',
+                    borderRadius: '18px',
+                    background:
+                      'linear-gradient(135deg, rgba(11,14,20,0.86), rgba(11,14,20,0.92))',
+                    backdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(236,72,153,0.18)',
+                    zIndex: 3,
+                  }}
+                >
+                  {renderRoundEndContent()}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           {/* Drawing toolbar — only for drawer */}
           {isDrawer && phase === 'playing' && (
@@ -870,10 +1319,24 @@ export function SkribblePlayArea({
           )}
         </div>
 
-        {/* ── Right sidebar: Chat + Players ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {/* ── Right sidebar: Chat + Players ──
+            On mobile (single-column layout) the chat is the primary
+            interaction surface, so it should sit directly under the
+            canvas. The Players card moves below the chat via flex order
+            tweaks so the user keeps drawing → guess input within thumb
+            reach. Desktop keeps the Players card on top of the chat so
+            scores are always visible alongside the canvas. */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+          }}
+          className="skribble-sidebar"
+        >
           {/* Player scores */}
           <div
+            className="skribble-players-card"
             style={{
               padding: '12px',
               borderRadius: '14px',
@@ -965,6 +1428,7 @@ export function SkribblePlayArea({
 
           {/* Chat / Guess area */}
           <div
+            className="skribble-chat-card"
             style={{
               flex: 1,
               display: 'flex',
@@ -980,6 +1444,10 @@ export function SkribblePlayArea({
               style={{
                 padding: '10px 12px',
                 borderBottom: '1px solid rgba(255,255,255,0.06)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '10px',
               }}
             >
               <h3
@@ -993,6 +1461,25 @@ export function SkribblePlayArea({
               >
                 {isDrawer ? 'Chat' : 'Guess the word'}
               </h3>
+              {/* Inline timer — sits next to the guess input so guessers
+                  can keep one eye on the canvas and one on the clock
+                  without darting to the header. */}
+              <InlineTimer
+                endsAt={
+                  phase === 'playing'
+                    ? roundEndsAt
+                    : phase === 'choosing'
+                      ? choosingEndsAt
+                      : null
+                }
+                variant={
+                  phase === 'playing'
+                    ? 'play'
+                    : phase === 'choosing'
+                      ? 'choose'
+                      : 'idle'
+                }
+              />
             </div>
 
             {/* Messages */}
@@ -1136,89 +1623,335 @@ export function SkribblePlayArea({
           </div>
         </div>
       </div>
+      )}
 
-      {/* ── Round end overlay ── */}
       <AnimatePresence>
-        {phase === 'roundEnd' && roundEndWord && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            style={{
-              padding: '28px 24px',
-              borderRadius: '20px',
-              border: '1px solid rgba(236,72,153,0.2)',
-              background: 'linear-gradient(135deg, rgba(236,72,153,0.08), rgba(168,85,247,0.04))',
-              textAlign: 'center',
-              marginTop: '8px',
-              boxShadow: '0 8px 32px -8px rgba(236,72,153,0.12)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginBottom: '10px' }}>
-              <IconSparkles size={14} color="var(--game-skribble)" />
-              <span style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--game-skribble)' }}>Round Over</span>
-            </div>
-            <p style={{ fontSize: '1.4rem', fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '0.18em', color: 'var(--text-primary)' }}>
-              The word was: <span style={{ color: 'var(--game-skribble)' }}>{roundEndWord.toUpperCase()}</span>
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '14px', flexWrap: 'wrap' }}>
-              {sortedPlayers.slice(0, 3).map((p, i) => (
-                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <IconMedal size={14} rank={i + 1} />
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</span>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#22C55E' }}>{scores[p.id] ?? 0}</span>
+        {phase === 'gameEnd' && (() => {
+          const winner = sortedPlayers[0]
+          const winnerScore = scores[winner?.id] ?? 0
+          const isTie =
+            sortedPlayers.length > 1 &&
+            (scores[sortedPlayers[1].id] ?? 0) === winnerScore &&
+            winnerScore > 0
+          const isCurrentUserWinner = winner?.id === currentUserId && winnerScore > 0
+
+          // Podium order: 2nd | 1st | 3rd (visual centre of gravity on 1st).
+          const podium = [
+            sortedPlayers[1],
+            sortedPlayers[0],
+            sortedPlayers[2],
+          ]
+          const remaining = sortedPlayers.slice(3)
+
+          return (
+            <motion.div
+              key="game-end-card"
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.32, ease: 'easeOut' }}
+              style={{
+                position: 'relative',
+                overflow: 'hidden',
+                padding: '36px 28px',
+                borderRadius: '24px',
+                border: '1px solid rgba(236,72,153,0.22)',
+                background:
+                  'radial-gradient(circle at 20% 0%, rgba(236,72,153,0.16), transparent 55%), radial-gradient(circle at 80% 100%, rgba(168,85,247,0.14), transparent 55%), linear-gradient(180deg, rgba(15,18,28,0.96), rgba(11,14,20,0.96))',
+                boxShadow: '0 24px 60px -32px rgba(236,72,153,0.45)',
+              }}
+            >
+              {/* Decorative sparkle motif so the card doesn't feel empty
+                  while the canvas is gone. Pure CSS — no extra deps. */}
+              <Sparkles />
+
+              <div
+                style={{
+                  position: 'relative',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '24px',
+                }}
+              >
+                {/* Header */}
+                <div style={{ textAlign: 'center' }}>
+                  <motion.div
+                    initial={{ scale: 0.6, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: 'spring', stiffness: 220, damping: 18, delay: 0.1 }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '64px',
+                      height: '64px',
+                      borderRadius: '50%',
+                      background:
+                        'radial-gradient(circle, rgba(234,179,8,0.28), rgba(234,179,8,0.04))',
+                      border: '1px solid rgba(234,179,8,0.35)',
+                      marginBottom: '12px',
+                    }}
+                  >
+                    <IconTrophy size={30} color="#EAB308" />
+                  </motion.div>
+                  <p
+                    style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      letterSpacing: '0.28em',
+                      textTransform: 'uppercase',
+                      color: 'var(--game-skribble)',
+                      marginBottom: '6px',
+                    }}
+                  >
+                    Final Results
+                  </p>
+                  <h2
+                    style={{
+                      fontSize: '1.7rem',
+                      fontWeight: 800,
+                      color: 'var(--text-primary)',
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {isTie
+                      ? "It's a tie!"
+                      : isCurrentUserWinner
+                        ? 'You won!'
+                        : winnerScore > 0
+                          ? `${winner?.name ?? 'Player'} wins!`
+                          : 'Game complete'}
+                  </h2>
+                  <p
+                    style={{
+                      marginTop: '6px',
+                      fontSize: '0.85rem',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    {totalRounds} {totalRounds === 1 ? 'round' : 'rounds'} drawn {'\u00B7'} {sortedPlayers.length}{' '}
+                    {sortedPlayers.length === 1 ? 'player' : 'players'}
+                  </p>
                 </div>
-              ))}
-            </div>
-            <p style={{ marginTop: '12px', fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>
-              Round {currentRound}/{totalRounds} {'\u00B7'} Next round starting soon{'\u2026'}
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
-      <AnimatePresence>
-        {phase === 'gameEnd' && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            style={{
-              padding: '32px 24px',
-              borderRadius: '20px',
-              border: '1px solid rgba(34,197,94,0.22)',
-              background: 'linear-gradient(135deg, rgba(34,197,94,0.06), rgba(59,130,246,0.04))',
-              textAlign: 'center',
-              marginTop: '8px',
-              boxShadow: '0 8px 32px -8px rgba(34,197,94,0.12)',
-            }}
-          >
-            <div style={{ marginBottom: '4px' }}><IconTrophy size={28} /></div>
-            <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#22C55E', marginBottom: '14px' }}>
-              Game Over
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
-              {sortedPlayers.map((p, i) => (
-                <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', borderRadius: '10px', background: i === 0 ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.03)', border: i === 0 ? '1px solid rgba(34,197,94,0.15)' : '1px solid rgba(255,255,255,0.05)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {i < 3 ? <IconMedal size={16} rank={i + 1} /> : <span style={{ fontSize: '0.75rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary)', minWidth: '16px', textAlign: 'center' }}>#{i + 1}</span>}
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}{p.id === currentUserId ? ' (You)' : ''}</span>
+                {/* Podium — only when at least one real entry to celebrate */}
+                {winnerScore > 0 && (
+                  <div className="skribble-podium">
+                    {podium.map((p, idx) => {
+                      if (!p) {
+                        return <div key={`empty-${idx}`} className="skribble-podium-slot" />
+                      }
+                      const rank = idx === 0 ? 2 : idx === 1 ? 1 : 3
+                      const heights = { 1: 132, 2: 96, 3: 76 } as const
+                      const colors: Record<1 | 2 | 3, string> = {
+                        1: '#EAB308',
+                        2: '#94A3B8',
+                        3: '#CD7F32',
+                      }
+                      const color = colors[rank as 1 | 2 | 3]
+                      const isYou = p.id === currentUserId
+                      return (
+                        <motion.div
+                          key={p.id}
+                          className="skribble-podium-slot"
+                          initial={{ opacity: 0, y: 24 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.18 + idx * 0.08, type: 'spring', stiffness: 180, damping: 18 }}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: '8px',
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '4px 10px',
+                              borderRadius: '999px',
+                              background: `${color}1A`,
+                              border: `1px solid ${color}40`,
+                            }}
+                          >
+                            <IconMedal size={13} rank={rank} />
+                            <span
+                              style={{
+                                fontSize: '0.7rem',
+                                fontWeight: 700,
+                                fontFamily: 'var(--font-mono)',
+                                color,
+                              }}
+                            >
+                              #{rank}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '0.95rem',
+                              fontWeight: 700,
+                              color: 'var(--text-primary)',
+                              maxWidth: '140px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              textAlign: 'center',
+                            }}
+                          >
+                            {p.name}
+                            {isYou ? ' (You)' : ''}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              fontFamily: 'var(--font-mono)',
+                              color,
+                            }}
+                          >
+                            {scores[p.id] ?? 0} pts
+                          </div>
+                          <motion.div
+                            initial={{ height: 0 }}
+                            animate={{ height: heights[rank as 1 | 2 | 3] }}
+                            transition={{ delay: 0.32 + idx * 0.08, duration: 0.45, ease: 'easeOut' }}
+                            style={{
+                              width: '100%',
+                              borderRadius: '14px 14px 6px 6px',
+                              background: `linear-gradient(180deg, ${color}26, ${color}0D)`,
+                              border: `1px solid ${color}33`,
+                              borderBottom: 'none',
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              justifyContent: 'center',
+                              paddingTop: '10px',
+                              fontFamily: 'var(--font-mono)',
+                              fontWeight: 800,
+                              fontSize: rank === 1 ? '1.4rem' : '1.1rem',
+                              color,
+                              letterSpacing: '0.05em',
+                            }}
+                          >
+                            {rank}
+                          </motion.div>
+                        </motion.div>
+                      )
+                    })}
                   </div>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: i === 0 ? '#22C55E' : 'var(--text-secondary)' }}>{scores[p.id] ?? 0} pts</span>
-                </div>
-              ))}
-            </div>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>The host can start a new game.</p>
-          </motion.div>
-        )}
+                )}
+
+                {/* Remaining ranks (4th and below) */}
+                {remaining.length > 0 && (
+                  <div
+                    style={{
+                      width: '100%',
+                      maxWidth: '480px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px',
+                    }}
+                  >
+                    {remaining.map((p, i) => (
+                      <motion.div
+                        key={p.id}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.5 + i * 0.04 }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 14px',
+                          borderRadius: '10px',
+                          background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.05)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span
+                            style={{
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              fontFamily: 'var(--font-mono)',
+                              color: 'var(--text-tertiary)',
+                              minWidth: '22px',
+                              textAlign: 'center',
+                            }}
+                          >
+                            #{i + 4}
+                          </span>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {p.name}
+                            {p.id === currentUserId ? ' (You)' : ''}
+                          </span>
+                        </div>
+                        <span
+                          style={{
+                            fontSize: '0.8rem',
+                            fontWeight: 700,
+                            fontFamily: 'var(--font-mono)',
+                            color: 'var(--text-secondary)',
+                          }}
+                        >
+                          {scores[p.id] ?? 0} pts
+                        </span>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+
+                <p
+                  style={{
+                    fontSize: '0.78rem',
+                    color: 'var(--text-tertiary)',
+                    textAlign: 'center',
+                  }}
+                >
+                  The host can start a new game from the room controls below.
+                </p>
+              </div>
+            </motion.div>
+          )
+        })()}
       </AnimatePresence>
 
       {/* Responsive style for mobile */}
       <style>{`
+        .skribble-podium {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 12px;
+          width: 100%;
+          max-width: 520px;
+          align-items: end;
+        }
         @media (max-width: 768px) {
           .skribble-layout {
             grid-template-columns: 1fr !important;
           }
+          /* On mobile the chat/guess input is the primary action surface,
+             so it sits directly beneath the canvas. The Players card moves
+             to the bottom — out of the way during play, easy to glance at
+             between rounds. Flex order doesn't disturb desktop where the
+             default DOM order (Players → Chat) is correct. */
+          .skribble-sidebar .skribble-chat-card {
+            order: 1;
+          }
+          .skribble-sidebar .skribble-players-card {
+            order: 2;
+          }
+          /* Podium becomes a vertical list on narrow screens — putting 1st
+             at the top, then 2nd, 3rd. Keeps the celebration legible without
+             miniaturising tap targets. */
+          .skribble-podium {
+            grid-template-columns: 1fr;
+            max-width: 320px;
+          }
+          .skribble-podium > .skribble-podium-slot:nth-child(1) { order: 2; }
+          .skribble-podium > .skribble-podium-slot:nth-child(2) { order: 1; }
+          .skribble-podium > .skribble-podium-slot:nth-child(3) { order: 3; }
         }
       `}</style>
     </div>

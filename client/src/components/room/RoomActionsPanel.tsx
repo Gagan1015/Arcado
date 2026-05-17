@@ -323,7 +323,7 @@ export function RoomActionsPanel() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-[var(--text-primary)]">Skribble Settings</p>
                 <p className="mt-0.5 text-[11px] text-[var(--text-tertiary)] truncate">
-                  {skribbleRounds} {skribbleRounds === 1 ? 'round' : 'rounds'} {'\u00B7'} Each player draws {skribbleRounds > 1 ? 'multiple times' : 'once'}
+                  {skribbleRounds} {skribbleRounds === 1 ? 'round total' : 'rounds total'} {'\u00B7'} Drawer rotates each round
                 </p>
               </div>
               <span className="shrink-0 text-[var(--text-tertiary)] transition-transform group-hover:rotate-45">
@@ -683,7 +683,7 @@ function SkribbleSettingsModal({
   if (typeof document === 'undefined') return null
 
   const roundPresets = [
-    { value: 1, label: 'Quick', desc: 'One draw each' },
+    { value: 1, label: 'Quick', desc: 'One round' },
     { value: 3, label: 'Standard', desc: 'Three rounds' },
     { value: 5, label: 'Marathon', desc: 'Five rounds' },
     { value: 8, label: 'Epic', desc: 'Eight rounds' },
@@ -734,7 +734,7 @@ function SkribbleSettingsModal({
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="text-sm font-semibold text-[var(--text-primary)]">Rounds</p>
-                <p className="text-[11px] text-[var(--text-tertiary)]">How many drawing turns per player</p>
+                <p className="text-[11px] text-[var(--text-tertiary)]">Total drawing turns in the game</p>
               </div>
             </div>
             <div className="flex items-center justify-center gap-1 rounded-2xl border border-[var(--border)]/50 bg-[var(--surface)]/30 p-2">
@@ -809,8 +809,8 @@ function SkribbleSettingsModal({
           <div className="rounded-xl border border-[var(--game-skribble)]/15 bg-[var(--game-skribble)]/5 px-4 py-3">
             <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
               <span className="font-semibold text-[var(--game-skribble)]">{rounds} {rounds === 1 ? 'round' : 'rounds'}</span> means
-              each player will get <span className="font-semibold">{rounds}</span> {rounds === 1 ? 'turn' : 'turns'} to draw.
-              The total number of drawing turns will be <span className="font-semibold">{rounds} × number of players</span>.
+              the game has <span className="font-semibold">{rounds}</span> total drawing {rounds === 1 ? 'turn' : 'turns'}.
+              The drawer rotates between players each round.
             </p>
           </div>
         </div>

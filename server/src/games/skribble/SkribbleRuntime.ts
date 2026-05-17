@@ -64,23 +64,25 @@ export class SkribbleRuntime extends BaseGameRuntime {
   private drawerOrder: UserId[] = []
   private roundTimer: ReturnType<typeof setTimeout> | null = null
   private roundEndsAt: Date | null = null
+  private choosingEndsAt: Date | null = null
   private readonly roundHistory: SkribbleRoundSummary[] = []
+  // Tracks every word that has been offered or used during this game so we
+  // never repeat words across rounds (gives a much better player experience).
+  private readonly usedWords = new Set<string>()
 
   constructor(io: Server, config: GameConfig, roomService: RoomService) {
     super(io, config, roomService)
-    const perPlayerRounds = config.settings?.rounds ?? 1
-    this.totalRounds = perPlayerRounds * config.players.length
-    console.info('[SkribbleRuntime] constructor', {
-      configSettingsRounds: config.settings?.rounds,
-      perPlayerRounds,
-      playerCount: config.players.length,
-      totalRounds: this.totalRounds,
-    })
+    // The configured rounds value is the total number of turns in the game,
+    // matching every other game in the codebase. Drawing order rotates
+    // through players, so with 5 rounds and 2 players each player draws
+    // either 2 or 3 times.
+    this.totalRounds = config.settings?.rounds ?? 1
   }
 
   async initialize() {
     this.drawerOrder = shuffle(Array.from(this.players.keys()))
     this.roundHistory.length = 0
+    this.usedWords.clear()
   }
 
   async start(): Promise<GameEventResult> {
@@ -194,6 +196,7 @@ export class SkribbleRuntime extends BaseGameRuntime {
       wordLength: this.roundState.word.length || undefined,
       correctGuessers: Array.from(this.roundState.correctGuessers),
       roundEndsAt: this.roundEndsAt?.toISOString(),
+      choosingEndsAt: isChoosing ? this.choosingEndsAt?.toISOString() : undefined,
       word:
         playerId === this.roundState.drawerId && this.roundState.word
           ? this.roundState.word
@@ -238,7 +241,12 @@ export class SkribbleRuntime extends BaseGameRuntime {
     }
 
     const drawerId = this.drawerOrder[(this.currentRound - 1) % this.drawerOrder.length]
-    const wordOptions = getRandomWords(WORD_CHOICE_COUNT, 'medium')
+    const wordOptions = getRandomWords(WORD_CHOICE_COUNT, 'medium', {
+      exclude: this.usedWords,
+    })
+    for (const option of wordOptions) {
+      this.usedWords.add(option.toLowerCase())
+    }
 
     this.phase = 'playing'
     this.roundState = {
@@ -253,6 +261,7 @@ export class SkribbleRuntime extends BaseGameRuntime {
     }
 
     this.clearTimers()
+    this.choosingEndsAt = new Date(Date.now() + WORD_CHOICE_SECONDS * 1000)
     this.roundTimer = setTimeout(() => {
       if (this.roundState.word || !this.roundState.wordOptions[0]) {
         return
@@ -274,6 +283,7 @@ export class SkribbleRuntime extends BaseGameRuntime {
             roundNumber: this.currentRound,
             totalRounds: this.totalRounds,
             drawerId,
+            choosingEndsAt: this.choosingEndsAt.toISOString(),
           },
         },
         {
@@ -285,6 +295,7 @@ export class SkribbleRuntime extends BaseGameRuntime {
             totalRounds: this.totalRounds,
             drawerId,
             words: wordOptions,
+            choosingEndsAt: this.choosingEndsAt.toISOString(),
           },
         },
       ],
@@ -646,6 +657,7 @@ export class SkribbleRuntime extends BaseGameRuntime {
       this.roundTimer = null
     }
     this.roundEndsAt = null
+    this.choosingEndsAt = null
   }
 
   private unrefRoundTimer() {

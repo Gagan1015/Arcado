@@ -154,6 +154,7 @@ type SkribbleUiState = {
   strokes: Stroke[]
   correctGuessers: string[]
   roundEndsAt: string | null
+  choosingEndsAt: string | null
   scores: Record<string, number>
   guessResult: SkribbleGuessResult | null
   messages: ChatMessage[]
@@ -258,6 +259,7 @@ export function useRoom({ roomCode, currentUserId, initialRoom }: UseRoomOptions
     strokes: [],
     correctGuessers: [],
     roundEndsAt: null,
+    choosingEndsAt: null,
     scores: Object.fromEntries(initialRoom.players.map((player) => [player.id, player.score])),
     guessResult: null,
     messages: [],
@@ -904,6 +906,7 @@ export function useRoom({ roomCode, currentUserId, initialRoom }: UseRoomOptions
         strokes: [],
         correctGuessers: [],
         roundEndsAt: null,
+        choosingEndsAt: payload.choosingEndsAt ?? null,
         guessResult: null,
         correctGuessNotification: null,
         roundEndWord: null,
@@ -920,6 +923,7 @@ export function useRoom({ roomCode, currentUserId, initialRoom }: UseRoomOptions
         drawerId: payload.drawerId,
         isDrawer: payload.drawerId === currentUserId,
         wordChoices: payload.words,
+        choosingEndsAt: payload.choosingEndsAt ?? prev.choosingEndsAt,
       }))
     }
 
@@ -939,6 +943,7 @@ export function useRoom({ roomCode, currentUserId, initialRoom }: UseRoomOptions
         strokes: [],
         correctGuessers: [],
         roundEndsAt: payload.roundEndsAt,
+        choosingEndsAt: null,
         guessResult: null,
         correctGuessNotification: null,
         roundEndWord: null,
@@ -1005,6 +1010,7 @@ export function useRoom({ roomCode, currentUserId, initialRoom }: UseRoomOptions
         phase: 'roundEnd',
         roundEndWord: payload.word,
         roundEndsAt: null,
+        choosingEndsAt: null,
         wordChoices: [],
         scores: payload.scores,
       }))
@@ -1015,6 +1021,7 @@ export function useRoom({ roomCode, currentUserId, initialRoom }: UseRoomOptions
         ...prev,
         phase: 'gameEnd',
         roundEndsAt: null,
+        choosingEndsAt: null,
         wordChoices: [],
         scores: Object.fromEntries(payload.finalScores.map((score) => [score.playerId, score.score])),
       }))
@@ -1040,6 +1047,7 @@ export function useRoom({ roomCode, currentUserId, initialRoom }: UseRoomOptions
         wordLength: payload.wordLength ?? prev.wordLength,
         correctGuessers: payload.correctGuessers ?? [],
         roundEndsAt: payload.roundEndsAt ?? null,
+        choosingEndsAt: payload.choosingEndsAt ?? null,
         word: payload.word ?? null,
         wordChoices: payload.wordChoices ?? [],
       }))

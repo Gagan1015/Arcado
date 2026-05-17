@@ -28,7 +28,7 @@ Arcado is a polished real-time multiplayer arcade built for quick rooms, fast ro
 - Authenticated profiles, recent games, stats, and persistent results.
 - Admin surfaces for users, rooms, games, moderation, analytics, logs, and settings.
 - Prisma and PostgreSQL persistence with seed data for local development.
-- AWS ECS Fargate deployment templates and a dedicated deployment runbook.
+- Single-box EC2 + Caddy deployment with a dedicated runbook.
 
 ## Tech Stack
 
@@ -39,7 +39,7 @@ Arcado is a polished real-time multiplayer arcade built for quick rooms, fast ro
 | Shared contracts | TypeScript workspace package, Zod schemas |
 | Database | PostgreSQL, Prisma, seed scripts |
 | Auth | NextAuth with Prisma adapter |
-| Deployment | Docker, AWS ECS Fargate, ALB, RDS, CloudFormation |
+| Deployment | Docker Compose on EC2, Caddy (TLS + reverse proxy), RDS PostgreSQL |
 
 ## Monorepo Map
 
@@ -49,7 +49,7 @@ arcado/
   server/   Socket.IO server and multiplayer game runtimes
   shared/   Shared types, schemas, constants, and validation
   db/       Prisma schema, database client, and seed data
-  deploy/   AWS deployment scripts and CloudFormation templates
+  deploy/   EC2 + Docker Compose + Caddy deployment runbook and configs
 ```
 
 ## Getting Started

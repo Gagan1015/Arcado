@@ -1,9 +1,8 @@
 # Arcado on a single EC2 box
 
-This is the streamlined deployment: **one EC2 instance**, Caddy for TLS, Docker
-Compose for the client + server, and your existing RDS PostgreSQL. It replaces
-the ECS/ALB/NAT/Secrets-Manager setup in `../README.md` and cuts monthly cost
-to roughly **\$20–30 + RDS**.
+This is the live production deployment: **one EC2 instance**, Caddy for TLS,
+Docker Compose for the client + server, and an RDS PostgreSQL instance.
+Roughly **\$20–30 + RDS** per month.
 
 ```
                  Route53

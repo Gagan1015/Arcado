@@ -20,7 +20,7 @@
 **/.cache
 **/tsconfig.tsbuildinfo
 
-# Local env files (secrets are passed at runtime via task definition)
+# Local env files (prod secrets are passed at runtime via --env-file)
 **/.env
 **/.env.*
 !**/.env.example
